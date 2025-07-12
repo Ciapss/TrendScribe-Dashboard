@@ -19,17 +19,22 @@ interface SourceConfig {
     linkup: boolean;
     rss_feeds: boolean;
     twitter: boolean;
+    hashtags: boolean;
   };
   source_weights: {
     reddit: number;
     linkup: number;
     rss_feeds: number;
     twitter: number;
+    hashtags: number;
   };
   rss_preferences: {
     enabled_feed_ids: string[];
   };
   twitter_preferences?: {
+    enabled_hashtag_ids: string[];
+  };
+  hashtag_preferences?: {
     enabled_hashtag_ids: string[];
   };
   max_trends_per_source: number;
@@ -41,7 +46,7 @@ interface SourceSelectorProps {
   compact?: boolean;
 }
 
-const VALID_SOURCE_TYPES = ['reddit', 'linkup', 'rss_feeds', 'twitter'] as const;
+const VALID_SOURCE_TYPES = ['reddit', 'linkup', 'rss_feeds', 'twitter', 'hashtags'] as const;
 
 export function SourceSelector({ 
   onConfigureFeeds, 
@@ -62,6 +67,17 @@ export function SourceSelector({
 
   useEffect(() => {
     loadConfig();
+    
+    // Listen for hashtag configuration changes
+    const handleHashtagConfigChange = () => {
+      loadConfig();
+    };
+    
+    window.addEventListener('hashtag-config-changed', handleHashtagConfigChange);
+    
+    return () => {
+      window.removeEventListener('hashtag-config-changed', handleHashtagConfigChange);
+    };
   }, []);
 
   const loadConfig = async () => {
@@ -168,6 +184,8 @@ export function SourceSelector({
         return 'Linkup';
       case 'twitter':
         return 'Twitter/X';
+      case 'hashtags':
+        return 'Hashtags';
       default:
         return sourceType;
     }
@@ -182,6 +200,8 @@ export function SourceSelector({
       case 'linkup':
         return 'Real-time web search and analysis';
       case 'twitter':
+        return 'Twitter/X social media monitoring';
+      case 'hashtags':
         return `Hashtag monitoring (${hashtagsInfo.enabled_hashtags_count}/${hashtagsInfo.available_hashtags_count} hashtags enabled)`;
       default:
         return '';
@@ -249,7 +269,7 @@ export function SourceSelector({
                       {feedsInfo.enabled_rss_feeds_count}
                     </Badge>
                   )}
-                  {sourceType === 'twitter' && (
+                  {sourceType === 'hashtags' && (
                     <Badge variant="secondary" className="text-xs">
                       {hashtagsInfo.enabled_hashtags_count}
                     </Badge>
@@ -313,7 +333,7 @@ export function SourceSelector({
                         </Badge>
                       )}
                       
-                      {sourceType === 'twitter' && (
+                      {sourceType === 'hashtags' && (
                         <Badge variant="secondary" className="text-xs">
                           {hashtagsInfo.enabled_hashtags_count}/{hashtagsInfo.available_hashtags_count} hashtags
                         </Badge>

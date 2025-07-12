@@ -116,14 +116,22 @@ export function TwitterHashtagManager() {
   const loadHashtags = async () => {
     try {
       setLoading(true);
+      // Add timestamp to force cache bypass
       const data = await apiClient.getUserHashtags(false); // Get all hashtags including disabled
-      console.log('Loaded hashtags data:', data);
+      console.log('Loaded hashtags data at', new Date().toISOString(), ':', data);
       
       // Debug: Check for hashtags with undefined IDs
       const hashtagsWithoutIds = data.filter(h => !h.id || h.id === 'undefined');
       if (hashtagsWithoutIds.length > 0) {
         console.warn('Found hashtags without valid IDs:', hashtagsWithoutIds);
       }
+      
+      // Debug: Log enabled/disabled status
+      console.log('Hashtag states:', data.map(h => ({ 
+        hashtag: h.hashtag, 
+        id: h.id, 
+        enabled: h.enabled 
+      })));
       
       setHashtags(data);
     } catch (error) {
@@ -168,6 +176,9 @@ export function TwitterHashtagManager() {
         exclude_keywords: []
       });
       await loadHashtags();
+      
+      // Notify parent component to refresh source configuration
+      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
     } catch (error) {
       console.error('Error adding hashtag:', error);
       toast.error("Failed to add hashtag");
@@ -205,6 +216,9 @@ export function TwitterHashtagManager() {
       setBulkAddIndustry('');
       setSelectedDefaultHashtags(new Set());
       await loadHashtags();
+      
+      // Notify parent component to refresh source configuration
+      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
     } catch (error) {
       console.error('Error bulk adding hashtags:', error);
       toast.error("Failed to add hashtags");
@@ -240,6 +254,9 @@ export function TwitterHashtagManager() {
       await apiClient.deleteUserHashtag(hashtagId);
       toast.success(`Removed ${hashtag}`);
       await loadHashtags();
+      
+      // Notify parent component to refresh source configuration
+      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
     } catch (error) {
       console.error('Error deleting hashtag:', error);
       toast.error("Failed to remove hashtag");
@@ -254,12 +271,45 @@ export function TwitterHashtagManager() {
       return;
     }
 
+    // Optimistically update the UI immediately
+    setHashtags(prev => 
+      prev.map(hashtag => 
+        hashtag.id === hashtagId 
+          ? { ...hashtag, enabled }
+          : hashtag
+      )
+    );
+
     try {
-      await apiClient.updateUserHashtag(hashtagId, { enabled });
-      await loadHashtags();
+      const response = await apiClient.toggleHashtag(hashtagId, enabled);
+      console.log('Toggle response:', response);
+      toast.success(response.message);
+      
+      // Update state with the response from toggle endpoint
+      if (response.hashtag) {
+        setHashtags(prev => 
+          prev.map(hashtag => 
+            hashtag.id === response.hashtag.id 
+              ? { ...hashtag, enabled: response.hashtag.enabled }
+              : hashtag
+          )
+        );
+      }
+      
+      // Notify parent component to refresh source configuration
+      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
     } catch (error) {
       console.error('Error toggling hashtag:', error);
       toast.error("Failed to update hashtag status");
+      
+      // Revert the optimistic update on error
+      setHashtags(prev => 
+        prev.map(hashtag => 
+          hashtag.id === hashtagId 
+            ? { ...hashtag, enabled: !enabled }
+            : hashtag
+        )
+      );
     }
   };
 

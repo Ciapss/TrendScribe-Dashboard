@@ -282,6 +282,13 @@ class APIClient {
     blogType?: string
     industry?: string
     topic?: string
+    researchDepth?: 'moderate' | 'deep'
+    
+    // Research Caching Parameters
+    useCachedResearch?: boolean
+    maxResearchAgeHours?: number
+    forceFreshResearch?: boolean
+    
     options?: Record<string, unknown>
   }): Promise<{ jobId: string } | { post: BlogPost }> {
     // Determine which endpoint to use based on parameters
@@ -291,7 +298,12 @@ class APIClient {
         topic: params.topic,
         blog_type: params.blogType || 'informative',
         language: params.language || 'en',
-        research_depth: params.options?.enableComprehensiveResearch ? 'deep' : 'moderate'
+        research_depth: params.researchDepth || 'moderate',
+        
+        // Research caching parameters
+        use_cached_research: params.useCachedResearch ?? true,
+        max_research_age_hours: params.maxResearchAgeHours ?? 24,
+        force_fresh_research: params.forceFreshResearch ?? false,
       }
       
       const response = await this.request('/blog-posts/generate', {
@@ -313,8 +325,13 @@ class APIClient {
         industry: params.industry,
         blog_type: params.blogType || 'informative',
         language: params.language || 'en',
-        research_depth: params.options?.enableComprehensiveResearch ? 'deep' : 'moderate',
-        count: 1
+        research_depth: params.researchDepth || 'moderate',
+        count: 1,
+        
+        // Research caching parameters
+        use_cached_research: params.useCachedResearch ?? true,
+        max_research_age_hours: params.maxResearchAgeHours ?? 24,
+        force_fresh_research: params.forceFreshResearch ?? false,
       }
       
       const response = await this.request('/blog-posts/from-trends', {
@@ -988,6 +1005,11 @@ class APIClient {
     researchDepth?: string
     selectedTrendIds: string[]
     industry?: string
+    
+    // Research Caching Parameters
+    useCachedResearch?: boolean
+    maxResearchAgeHours?: number
+    forceFreshResearch?: boolean
   }): Promise<{ jobId: string }> {
     // Use the correct endpoint for selected trends
     const requestBody = {
@@ -995,6 +1017,11 @@ class APIClient {
       blog_type: params.blogType || 'informative',
       language: params.language || 'en',
       research_depth: params.researchDepth || 'moderate',
+      
+      // Research caching parameters
+      use_cached_research: params.useCachedResearch ?? true,
+      max_research_age_hours: params.maxResearchAgeHours ?? 24,
+      force_fresh_research: params.forceFreshResearch ?? false,
     }
     
     console.log('Calling /blog-posts/from-selected-trends with:', requestBody)
@@ -1414,6 +1441,20 @@ class APIClient {
     return this.request('/user/sources/hashtags/bulk', {
       method: 'POST',
       body: JSON.stringify({ updates }),
+    }, { skipCache: true })
+  }
+
+  async toggleHashtag(hashtagId: string, enabled: boolean): Promise<{
+    message: string
+    hashtag: {
+      id: string
+      hashtag: string
+      enabled: boolean
+    }
+  }> {
+    return this.request('/sources/config/toggle-hashtag', {
+      method: 'POST',
+      body: JSON.stringify({ hashtag_id: hashtagId, enabled }),
     }, { skipCache: true })
   }
 }
