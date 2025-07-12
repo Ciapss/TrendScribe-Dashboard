@@ -926,6 +926,26 @@ class APIClient {
     }, { skipCache: true }) // Never cache discovery requests
   }
 
+  async discoverTrendsAsync(params: {
+    industry: string
+    limit?: number
+  }): Promise<{
+    success: boolean
+    message: string
+    job_id: string
+    industry: string
+  }> {
+    const searchParams = new URLSearchParams()
+    searchParams.set('industry', params.industry)
+    searchParams.set('async', 'true') // Request async processing
+    if (params.limit) searchParams.set('limit', params.limit.toString())
+    
+    const url = `/trends/discover?${searchParams.toString()}`
+    return this.request(url, {
+      method: 'POST'
+    }, { skipCache: true }) // Never cache discovery requests
+  }
+
   async selectTrends(params: {
     trend_ids: string[]
   }): Promise<{

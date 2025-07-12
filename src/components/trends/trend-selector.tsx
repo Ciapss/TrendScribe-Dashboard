@@ -24,6 +24,7 @@ interface TrendSelectorProps {
   filters: TrendFiltersType;
   onFiltersChange: (filters: TrendFiltersType) => void;
   onLoadTopics?: () => void;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -40,6 +41,7 @@ export function TrendSelector({
   filters,
   onFiltersChange,
   onLoadTopics,
+  disabled = false,
   className,
 }: TrendSelectorProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -203,6 +205,7 @@ export function TrendSelector({
         industries={industries}
         statuses={statuses}
         onLoadTopics={onLoadTopics}
+        disabled={disabled}
       />
 
       {/* Trending Topics Table */}
@@ -231,6 +234,7 @@ export function TrendSelector({
                 size="sm"
                 onClick={() => onTrendSelection([])}
                 className="h-6 text-xs"
+                disabled={disabled}
               >
                 Clear selection
               </Button>
@@ -329,10 +333,12 @@ export function TrendSelector({
                     {/* Main Row */}
                     <div 
                       className={cn(
-                        "grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 p-3 hover:bg-muted/50 cursor-pointer transition-colors",
+                        "grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 p-3 transition-colors",
+                        !disabled && "hover:bg-muted/50 cursor-pointer",
+                        disabled && "opacity-60 cursor-not-allowed",
                         isSelected && "bg-blue-50 border-l-4 border-l-blue-500"
                       )}
-                      onClick={() => toggleRowExpansion(trend.id)}
+                      onClick={disabled ? undefined : () => toggleRowExpansion(trend.id)}
                     >
                       <div className="min-w-0">
                         <div className="font-medium text-sm truncate">{trend.topic}</div>
@@ -430,6 +436,7 @@ export function TrendSelector({
                               handleRowSelect(trend.id);
                             }}
                             variant={isSelected ? "default" : "outline"}
+                            disabled={disabled}
                           >
                             {isSelected ? "Selected" : "Select Topic"}
                           </Button>

@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Filter, RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { apiClient } from "@/lib/api-client";
 import { INDUSTRIES, INDUSTRY_LABELS } from "@/lib/constants";
-import type { TrendFilters } from "@/types";
+import type { TrendFilters, Industry } from "@/types";
 
 interface TrendFiltersProps {
   filters: TrendFilters;
@@ -17,6 +19,7 @@ interface TrendFiltersProps {
   statuses: string[];
   onLoadTopics?: () => void;
   onConfigureSources?: () => void;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -24,8 +27,41 @@ export function TrendFilters({
   filters,
   onFiltersChange,
   onLoadTopics,
+  disabled = false,
   className,
 }: TrendFiltersProps) {
+  const [industries, setIndustries] = useState<Industry[]>([]);
+  const [isLoadingIndustries, setIsLoadingIndustries] = useState(true);
+
+  useEffect(() => {
+    const loadIndustries = async () => {
+      try {
+        const data = await apiClient.getIndustries();
+        setIndustries(data);
+      } catch (error) {
+        console.error('Failed to load industries:', error);
+        // Fallback to static industries for backward compatibility
+        const fallbackIndustries: Industry[] = INDUSTRIES.map(key => ({
+          id: key,
+          name: INDUSTRY_LABELS[key],
+          description: `${INDUSTRY_LABELS[key]} industry`,
+          keywords: [],
+          common_categories: [],
+          default_subreddits: [],
+          is_built_in: true,
+          is_custom: false,
+          created_at: '',
+          updated_at: ''
+        }));
+        setIndustries(fallbackIndustries);
+      } finally {
+        setIsLoadingIndustries(false);
+      }
+    };
+
+    loadIndustries();
+  }, []);
+
   const updateFilter = (key: keyof TrendFilters, value: string | number | boolean) => {
     onFiltersChange({
       ...filters,
@@ -65,6 +101,7 @@ export function TrendFilters({
               size="sm"
               onClick={clearAllFilters}
               className="h-7 text-xs"
+              disabled={disabled}
             >
               <RotateCcw className="h-3 w-3 mr-1" />
               Clear All
@@ -91,14 +128,15 @@ export function TrendFilters({
                   clearFilter("search");
                 }
               }}
+              disabled={isLoadingIndustries || disabled}
             >
               <SelectTrigger className="h-9">
-                <SelectValue placeholder="Select industry" />
+                <SelectValue placeholder={isLoadingIndustries ? "Loading..." : "Select industry"} />
               </SelectTrigger>
               <SelectContent>
-                {INDUSTRIES.map((industry) => (
-                  <SelectItem key={industry} value={industry}>
-                    {INDUSTRY_LABELS[industry]}
+                {industries.map((industry) => (
+                  <SelectItem key={industry.name} value={industry.name}>
+                    {industry.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -112,7 +150,7 @@ export function TrendFilters({
               variant="default" 
               size="sm" 
               className="h-9 w-full"
-              disabled={!filters.industry}
+              disabled={!filters.industry || disabled}
               onClick={() => {
                 if (onLoadTopics && filters.industry) {
                   onLoadTopics();
@@ -135,6 +173,7 @@ export function TrendFilters({
                 value={filters.search || ""}
                 onChange={(e) => updateFilter("search", e.target.value)}
                 className="h-9"
+                disabled={disabled}
               />
               {filters.search && (
                 <Button
@@ -143,6 +182,7 @@ export function TrendFilters({
                   size="sm"
                   className="absolute right-1 top-1 h-7 w-7 p-0"
                   onClick={() => clearFilter("search")}
+                  disabled={disabled}
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -165,6 +205,7 @@ export function TrendFilters({
                     size="sm"
                     className="h-4 w-4 p-0 hover:bg-transparent"
                     onClick={() => clearFilter("search")}
+                    disabled={disabled}
                   >
                     <X className="h-3 w-3" />
                   </Button>
@@ -179,6 +220,7 @@ export function TrendFilters({
                     size="sm"
                     className="h-4 w-4 p-0 hover:bg-transparent"
                     onClick={() => clearFilter("industry")}
+                    disabled={disabled}
                   >
                     <X className="h-3 w-3" />
                   </Button>
