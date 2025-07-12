@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -15,15 +13,13 @@ import { toast } from "sonner";
 import { INDUSTRIES, INDUSTRY_LABELS } from "@/lib/constants";
 import { 
   Plus, 
-  MoreVertical, 
   Edit, 
   Trash2, 
   ExternalLink, 
-  RefreshCw, 
-  CheckCircle, 
-  XCircle,
+  RefreshCw,
   Globe,
-  AlertTriangle
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 interface RSSFeed {
@@ -70,6 +66,7 @@ export function RSSFeedManager() {
   const [systemFeeds, setSystemFeeds] = useState<RSSFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [enabledFeeds, setEnabledFeeds] = useState<Set<string>>(new Set());
+  const [expandedFeeds, setExpandedFeeds] = useState<Set<string>>(new Set());
   
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -343,96 +340,175 @@ export function RSSFeedManager() {
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'error':
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'validating':
-        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />;
-      default:
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     const variant = status === 'active' ? 'default' : status === 'error' ? 'destructive' : 'secondary';
     return <Badge variant={variant}>{status}</Badge>;
   };
 
+  const toggleFeedExpansion = (feedId: string) => {
+    setExpandedFeeds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(feedId)) {
+        newSet.delete(feedId);
+      } else {
+        newSet.add(feedId);
+      }
+      return newSet;
+    });
+  };
+
   const renderFeedCard = (feed: RSSFeed, isSystemFeed: boolean = false) => {
     const isEnabled = enabledFeeds.has(feed.id);
+    const isExpanded = expandedFeeds.has(feed.id);
     
     return (
-      <div key={feed.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-        <div className="flex items-center gap-3 flex-1">
-          <Checkbox 
-            checked={isEnabled}
-            onCheckedChange={(enabled) => handleToggleFeed(feed.id, enabled as boolean)}
-          />
-          
+      <div key={feed.id} className="space-y-2">
+        {/* Header row - simplified layout like hashtags */}
+        <div className="flex items-center justify-between p-3 border rounded">
           <div className="flex items-center gap-2">
-            {getStatusIcon(feed.status)}
+            <input 
+              className="rounded h-4 w-4" 
+              type="checkbox" 
+              checked={isEnabled}
+              onChange={(e) => handleToggleFeed(feed.id, e.target.checked)}
+            />
+            <span className="text-sm font-medium">{feed.name}</span>
           </div>
-          
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h4 className="font-medium truncate">{feed.name}</h4>
-              {isSystemFeed && (
-                <Badge variant="outline" className="text-xs">System</Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground truncate">{feed.url}</p>
-            
-            {feed.stats && (
-              <div className="text-xs text-muted-foreground mt-1">
-                {feed.stats.total_entries_processed} entries • {feed.stats.trends_discovered} trends • Score: {feed.stats.avg_trend_score.toFixed(1)}
-              </div>
-            )}
-            
-            {feed.categories.length > 0 && (
-              <div className="flex gap-1 mt-2">
-                {feed.categories.slice(0, 3).map((category, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs">
-                    {category}
-                  </Badge>
-                ))}
-                {feed.categories.length > 3 && (
-                  <Badge variant="secondary" className="text-xs">
-                    +{feed.categories.length - 3} more
-                  </Badge>
-                )}
-              </div>
-            )}
+          <div className="flex items-center gap-2">
+            <Badge variant={isEnabled ? "default" : "secondary"} className="text-xs">
+              {isEnabled ? "Active" : "Disabled"}
+            </Badge>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => toggleFeedExpansion(feed.id)}
+            >
+              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
           </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          {getStatusBadge(feed.status)}
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleTestFeed(feed.id)}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Test Feed
-              </DropdownMenuItem>
+
+        {/* Expanded content */}
+        {isExpanded && (
+          <div className="ml-6 p-4 border-l-2 border-muted bg-muted/10 space-y-4">
+            {/* Feed details */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                {getStatusBadge(feed.status)}
+              </div>
               
-              <DropdownMenuItem asChild>
-                <a href={feed.url} target="_blank" rel="noopener noreferrer">
+              <div className="space-y-2">
+                <div>
+                  <span className="text-sm font-medium text-muted-foreground">URL: </span>
+                  <a href={feed.url} target="_blank" rel="noopener noreferrer" 
+                     className="text-sm text-blue-600 hover:underline break-all">
+                    {feed.url}
+                  </a>
+                </div>
+
+                {feed.feed_url && feed.feed_url !== feed.url && (
+                  <div>
+                    <span className="text-sm font-medium text-muted-foreground">Feed URL: </span>
+                    <a href={feed.feed_url} target="_blank" rel="noopener noreferrer" 
+                       className="text-sm text-blue-600 hover:underline break-all">
+                      {feed.feed_url}
+                    </a>
+                  </div>
+                )}
+                
+                {feed.title && (
+                  <div>
+                    <span className="text-sm font-medium text-muted-foreground">Title: </span>
+                    <span className="text-sm">{feed.title}</span>
+                  </div>
+                )}
+                
+                {feed.description && (
+                  <div>
+                    <span className="text-sm font-medium text-muted-foreground">Description: </span>
+                    <span className="text-sm text-muted-foreground">{feed.description}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Statistics */}
+            {feed.stats && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-background border rounded">
+                <div className="text-center">
+                  <div className="text-sm font-medium">{feed.stats.total_entries_processed}</div>
+                  <div className="text-xs text-muted-foreground">Entries</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm font-medium">{feed.stats.trends_discovered}</div>
+                  <div className="text-xs text-muted-foreground">Trends</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm font-medium">{feed.stats.avg_trend_score.toFixed(1)}</div>
+                  <div className="text-xs text-muted-foreground">Score</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm font-medium">{feed.stats.reliability_score}%</div>
+                  <div className="text-xs text-muted-foreground">Reliability</div>
+                </div>
+              </div>
+            )}
+
+            {/* Categories and Tags */}
+            {feed.categories.length > 0 && (
+              <div>
+                <span className="text-sm font-medium text-muted-foreground mb-2 block">Categories:</span>
+                <div className="flex flex-wrap gap-1">
+                  {feed.categories.map((category, index) => (
+                    <Badge key={index} variant="secondary" className="text-xs">
+                      {INDUSTRY_LABELS[category] || category}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {feed.tags.length > 0 && (
+              <div>
+                <span className="text-sm font-medium text-muted-foreground mb-2 block">Tags:</span>
+                <div className="flex flex-wrap gap-1">
+                  {feed.tags.map((tag, index) => (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2 pt-2 border-t">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleTestFeed(feed.id)}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Test
+              </Button>
+              
+              <a href={feed.url} target="_blank" rel="noopener noreferrer">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                >
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Open URL
-                </a>
-              </DropdownMenuItem>
+                  Visit
+                </Button>
+              </a>
               
               {!isSystemFeed && (
                 <>
-                  <DropdownMenuItem 
+                  <Button 
+                    variant="outline" 
+                    size="sm"
                     onClick={() => {
                       setEditingFeed(feed);
                       setShowEditDialog(true);
@@ -440,20 +516,22 @@ export function RSSFeedManager() {
                   >
                     <Edit className="h-4 w-4 mr-2" />
                     Edit
-                  </DropdownMenuItem>
+                  </Button>
                   
-                  <DropdownMenuItem 
+                  <Button 
+                    variant="outline" 
+                    size="sm"
                     onClick={() => handleDeleteFeed(feed.id, feed.name)}
-                    className="text-destructive"
+                    className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete
-                  </DropdownMenuItem>
+                  </Button>
                 </>
               )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -484,14 +562,20 @@ export function RSSFeedManager() {
       {/* Header */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>RSS Feeds</CardTitle>
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              RSS Feeds
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1 mb-3">
+              Manage RSS feeds to discover trending topics from news sources, blogs, and industry publications.
+            </p>
             <div className="flex gap-2">
               <Dialog open={showDiscoverDialog} onOpenChange={setShowDiscoverDialog}>
                 <DialogTrigger asChild>
-                  <Button variant="outline">
+                  <Button variant="outline" size="sm">
                     <Globe className="h-4 w-4 mr-2" />
-                    Discover Feeds
+                    Discover
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -546,9 +630,9 @@ export function RSSFeedManager() {
               
               <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button size="sm">
                     <Plus className="h-4 w-4 mr-2" />
-                    Add RSS Feed
+                    Add Custom
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -667,12 +751,7 @@ export function RSSFeedManager() {
         </CardHeader>
 
         <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            Manage RSS feeds to discover trending topics from news sources, blogs, and industry publications.
-            Use checkboxes to enable/disable feeds for trend discovery.
-          </p>
-          
-          <div className="flex gap-4 text-sm">
+          <div className="flex gap-4 text-sm mb-4">
             <div>
               <span className="font-medium">{enabledFeeds.size}</span> feeds enabled
             </div>

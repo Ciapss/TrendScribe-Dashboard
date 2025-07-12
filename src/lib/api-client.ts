@@ -1294,6 +1294,110 @@ class APIClient {
       body: JSON.stringify({ industries }),
     }, { skipCache: true })
   }
+
+  // User Hashtag Management (Twitter/X)
+  async getUserHashtags(enabledOnly: boolean = false): Promise<Array<{
+    id: string
+    hashtag: string
+    industry: string
+    enabled: boolean
+    is_custom: boolean
+    track_sentiment: boolean
+    min_engagement: number
+    exclude_retweets: boolean
+    exclude_replies: boolean
+    language_filter?: string
+    include_keywords: string[]
+    exclude_keywords: string[]
+    trends_discovered: number
+    avg_trend_score: number
+    last_fetch_at?: string
+    created_at: string
+    updated_at: string
+  }>> {
+    const url = enabledOnly ? '/user/sources/hashtags' : '/user/sources/hashtags?enabled_only=false'
+    const response = await this.request<Array<Record<string, unknown>>>(url, {}, { skipCache: true })
+    
+    // Transform _id to id for each hashtag (similar to jobs)
+    return response.map(hashtag => {
+      const hashtagWithId = hashtag as Record<string, unknown> & { _id?: string }
+      return {
+        ...hashtag,
+        id: hashtagWithId._id || hashtag.id,
+      }
+    })
+  }
+
+  async addUserHashtag(hashtagData: {
+    hashtag: string
+    industry: string
+    enabled?: boolean
+    is_custom?: boolean
+    track_sentiment?: boolean
+    min_engagement?: number
+    exclude_retweets?: boolean
+    exclude_replies?: boolean
+    language_filter?: string
+    include_keywords?: string[]
+    exclude_keywords?: string[]
+  }): Promise<{
+    id: string
+    hashtag: string
+    industry: string
+    enabled: boolean
+    is_custom: boolean
+  }> {
+    try {
+      return this.request('/user/sources/hashtags', {
+        method: 'POST',
+        body: JSON.stringify(hashtagData),
+      }, { skipCache: true })
+    } catch (error) {
+      console.error('Error in addUserHashtag:', error)
+      throw error
+    }
+  }
+
+  async updateUserHashtag(hashtagId: string, updateData: {
+    enabled?: boolean
+    track_sentiment?: boolean
+    min_engagement?: number
+    exclude_retweets?: boolean
+    exclude_replies?: boolean
+    language_filter?: string
+    include_keywords?: string[]
+    exclude_keywords?: string[]
+  }): Promise<{
+    id: string
+    hashtag: string
+    industry: string
+    enabled: boolean
+    is_custom: boolean
+  }> {
+    return this.request(`/user/sources/hashtags/${hashtagId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    }, { skipCache: true })
+  }
+
+  async deleteUserHashtag(hashtagId: string): Promise<void> {
+    await this.request(`/user/sources/hashtags/${hashtagId}`, {
+      method: 'DELETE',
+    }, { skipCache: true })
+  }
+
+  async bulkUpdateHashtags(updates: Array<{
+    hashtag_id: string
+    enabled: boolean
+  }>): Promise<{
+    success: boolean
+    updated_count: number
+  }> {
+    return this.request('/user/sources/hashtags/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ updates }),
+    }, { skipCache: true })
+  }
 }
 
 // Export singleton instance

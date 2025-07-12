@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,8 +10,6 @@ import { toast } from "sonner";
 import { 
   Settings,
   RefreshCw,
-  CheckCircle,
-  XCircle,
   AlertTriangle
 } from "lucide-react";
 
@@ -21,14 +18,19 @@ interface SourceConfig {
     reddit: boolean;
     linkup: boolean;
     rss_feeds: boolean;
+    twitter: boolean;
   };
   source_weights: {
     reddit: number;
     linkup: number;
     rss_feeds: number;
+    twitter: number;
   };
   rss_preferences: {
     enabled_feed_ids: string[];
+  };
+  twitter_preferences?: {
+    enabled_hashtag_ids: string[];
   };
   max_trends_per_source: number;
 }
@@ -39,7 +41,7 @@ interface SourceSelectorProps {
   compact?: boolean;
 }
 
-const VALID_SOURCE_TYPES = ['reddit', 'linkup', 'rss_feeds'] as const;
+const VALID_SOURCE_TYPES = ['reddit', 'linkup', 'rss_feeds', 'twitter'] as const;
 
 export function SourceSelector({ 
   onConfigureFeeds, 
@@ -52,6 +54,10 @@ export function SourceSelector({
   const [feedsInfo, setFeedsInfo] = useState({
     enabled_rss_feeds_count: 0,
     available_rss_feeds_count: 0
+  });
+  const [hashtagsInfo, setHashtagsInfo] = useState({
+    enabled_hashtags_count: 0,
+    available_hashtags_count: 0
   });
 
   useEffect(() => {
@@ -76,6 +82,10 @@ export function SourceSelector({
           setFeedsInfo({
             enabled_rss_feeds_count: data.enabled_rss_feeds_count || 0,
             available_rss_feeds_count: data.available_rss_feeds_count || 0
+          });
+          setHashtagsInfo({
+            enabled_hashtags_count: data.enabled_hashtags_count || 0,
+            available_hashtags_count: data.available_hashtags_count || 0
           });
         } else {
           throw new Error('Invalid source configuration response');
@@ -147,22 +157,6 @@ export function SourceSelector({
     }
   };
 
-  const getSourceIcon = (sourceType: string, enabled: boolean) => {
-    if (!enabled) {
-      return <XCircle className="h-4 w-4 text-muted-foreground" />;
-    }
-    
-    switch (sourceType) {
-      case 'reddit':
-        return <CheckCircle className="h-4 w-4 text-orange-500" />;
-      case 'rss_feeds':
-        return <CheckCircle className="h-4 w-4 text-blue-500" />;
-      case 'linkup':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      default:
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-    }
-  };
 
   const getSourceName = (sourceType: string) => {
     switch (sourceType) {
@@ -172,6 +166,8 @@ export function SourceSelector({
         return 'RSS Feeds';
       case 'linkup':
         return 'Linkup';
+      case 'twitter':
+        return 'Twitter/X';
       default:
         return sourceType;
     }
@@ -185,6 +181,8 @@ export function SourceSelector({
         return `News and blogs (${feedsInfo.enabled_rss_feeds_count}/${feedsInfo.available_rss_feeds_count} feeds enabled)`;
       case 'linkup':
         return 'Real-time web search and analysis';
+      case 'twitter':
+        return `Hashtag monitoring (${hashtagsInfo.enabled_hashtags_count}/${hashtagsInfo.available_hashtags_count} hashtags enabled)`;
       default:
         return '';
     }
@@ -235,18 +233,25 @@ export function SourceSelector({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {config.enabled_sources ? Object.entries(config.enabled_sources)
-                .filter(([sourceType]) => VALID_SOURCE_TYPES.includes(sourceType as "reddit" | "linkup" | "rss_feeds"))
+                .filter(([sourceType]) => VALID_SOURCE_TYPES.includes(sourceType as "reddit" | "linkup" | "rss_feeds" | "twitter"))
                 .map(([sourceType, enabled]) => (
                 <label key={sourceType} className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox 
+                  <input 
+                    className="rounded h-4 w-4"
+                    type="checkbox"
                     checked={enabled}
-                    onCheckedChange={(checked) => toggleSource(sourceType, checked as boolean)}
+                    onChange={(e) => toggleSource(sourceType, e.target.checked)}
                     disabled={saving}
                   />
                   <span className="text-sm">{getSourceName(sourceType)}</span>
                   {sourceType === 'rss_feeds' && (
                     <Badge variant="secondary" className="text-xs">
                       {feedsInfo.enabled_rss_feeds_count}
+                    </Badge>
+                  )}
+                  {sourceType === 'twitter' && (
+                    <Badge variant="secondary" className="text-xs">
+                      {hashtagsInfo.enabled_hashtags_count}
                     </Badge>
                   )}
                 </label>
@@ -284,21 +289,21 @@ export function SourceSelector({
       <CardContent>
         <div className="space-y-6">
           {config.enabled_sources ? Object.entries(config.enabled_sources)
-            .filter(([sourceType]) => VALID_SOURCE_TYPES.includes(sourceType as "reddit" | "linkup" | "rss_feeds"))
+            .filter(([sourceType]) => VALID_SOURCE_TYPES.includes(sourceType as "reddit" | "linkup" | "rss_feeds" | "twitter"))
             .map(([sourceType, enabled]) => (
             <div key={sourceType} className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {getSourceIcon(sourceType, enabled)}
-                  <div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
                     <div className="flex items-center gap-2">
+                      <input 
+                        className="rounded h-4 w-4"
+                        type="checkbox" 
+                        checked={enabled}
+                        onChange={(e) => toggleSource(sourceType, e.target.checked)}
+                        disabled={saving}
+                      />
                       <label className="font-medium cursor-pointer">
-                        <Checkbox 
-                          checked={enabled}
-                          onCheckedChange={(checked) => toggleSource(sourceType, checked as boolean)}
-                          disabled={saving}
-                          className="mr-2"
-                        />
                         {getSourceName(sourceType)}
                       </label>
                       
@@ -307,8 +312,14 @@ export function SourceSelector({
                           {feedsInfo.enabled_rss_feeds_count}/{feedsInfo.available_rss_feeds_count} feeds
                         </Badge>
                       )}
+                      
+                      {sourceType === 'twitter' && (
+                        <Badge variant="secondary" className="text-xs">
+                          {hashtagsInfo.enabled_hashtags_count}/{hashtagsInfo.available_hashtags_count} hashtags
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground ml-6">
+                    <p className="text-sm text-muted-foreground mt-1">
                       {getSourceDescription(sourceType)}
                     </p>
                   </div>
@@ -322,7 +333,7 @@ export function SourceSelector({
               </div>
 
               {enabled && showWeights && (
-                <div className="ml-6 space-y-2">
+                <div className="mt-3 ml-7 space-y-2">
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-muted-foreground w-16">Priority:</span>
                     <div className="flex-1">
@@ -339,7 +350,7 @@ export function SourceSelector({
                       {config.source_weights[sourceType as keyof typeof config.source_weights]?.toFixed(1)}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground ml-16">
+                  <p className="text-xs text-muted-foreground">
                     Higher values prioritize this source in trend discovery
                   </p>
                 </div>

@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { RSSFeedManager } from "@/components/sources/rss-feed-manager";
+import { TwitterHashtagManager } from "@/components/sources/twitter-hashtag-manager";
 import { SourceSelector } from "@/components/sources/source-selector";
 import { INDUSTRIES, INDUSTRY_LABELS } from "@/lib/constants";
 import { apiClient } from "@/lib/api-client";
@@ -49,29 +50,6 @@ const INDUSTRY_SUBREDDITS: Record<string, string[]> = {
   "startups": ["startups", "entrepreneur", "EntrepreneurRideAlong", "Entrepreneur", "smallbusiness", "SideProject"]
 };
 
-// Hashtag mapping for future Twitter/X integration
-const INDUSTRY_HASHTAGS: Record<string, string[]> = {
-  "technology": ["#Tech", "#Innovation", "#TechNews", "#Programming", "#Software", "#Developer"],
-  "healthcare": ["#Health", "#Healthcare", "#Wellness", "#Medicine", "#Fitness", "#Nutrition"],
-  "finance": ["#Finance", "#Investing", "#PersonalFinance", "#Money", "#Economics", "#Trading"],
-  "marketing": ["#Marketing", "#DigitalMarketing", "#SEO", "#SocialMedia", "#ContentMarketing", "#Advertising"],
-  "education": ["#Education", "#Learning", "#Teaching", "#Students", "#EdTech", "#OnlineLearning"],
-  "entertainment": ["#Entertainment", "#Movies", "#Music", "#Gaming", "#TV", "#Streaming"],
-  "sports": ["#Sports", "#Fitness", "#Athletics", "#NFL", "#Soccer", "#Basketball"],
-  "business": ["#Business", "#Entrepreneurship", "#Startup", "#Leadership", "#Management", "#Strategy"],
-  "science": ["#Science", "#Research", "#Innovation", "#STEM", "#Biology", "#Physics"],
-  "environment": ["#Environment", "#Climate", "#Sustainability", "#GreenTech", "#ClimateChange", "#Renewable"],
-  "politics": ["#Politics", "#Policy", "#Government", "#Election", "#Democracy", "#News"],
-  "travel": ["#Travel", "#Tourism", "#Adventure", "#Explore", "#Wanderlust", "#Vacation"],
-  "food": ["#Food", "#Cooking", "#Recipe", "#Foodie", "#Culinary", "#Nutrition"],
-  "fashion": ["#Fashion", "#Style", "#OOTD", "#Designer", "#Trend", "#Beauty"],
-  "automotive": ["#Cars", "#Automotive", "#Tesla", "#ElectricVehicles", "#Racing", "#Motorcycles"],
-  "real-estate": ["#RealEstate", "#Property", "#Housing", "#Investment", "#Mortgage", "#Homebuying"],
-  "cryptocurrency": ["#Crypto", "#Bitcoin", "#Ethereum", "#Blockchain", "#DeFi", "#NFT"],
-  "ai-ml": ["#AI", "#MachineLearning", "#ArtificialIntelligence", "#DeepLearning", "#DataScience", "#ML"],
-  "cybersecurity": ["#Cybersecurity", "#InfoSec", "#Privacy", "#DataProtection", "#Hacking", "#Security"],
-  "startups": ["#Startup", "#Entrepreneur", "#Innovation", "#VC", "#Funding", "#TechStartup"]
-};
 
 export default function SourcesSettingsPage() {
   const router = useRouter();
@@ -637,8 +615,8 @@ export default function SourcesSettingsPage() {
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Hashtags</span>
-                    <Badge variant="outline">Coming Soon</Badge>
+                    <span className="text-sm font-medium">Twitter Hashtags</span>
+                    <Badge variant="secondary">Available</Badge>
                   </div>
                   
                   <div className="flex items-center justify-between">
@@ -663,6 +641,10 @@ export default function SourcesSettingsPage() {
                     <div className="flex justify-between">
                       <span>Linkup</span>
                       <span>78% reliability</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Twitter/X</span>
+                      <span>90% reliability</span>
                     </div>
                   </div>
                 </div>
@@ -748,7 +730,7 @@ export default function SourcesSettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <h4 className="font-medium text-sm">Reddit</h4>
                   <p className="text-sm text-muted-foreground">
@@ -770,6 +752,14 @@ export default function SourcesSettingsPage() {
                   <p className="text-sm text-muted-foreground">
                     Performs real-time web search and analysis to find emerging 
                     trends and breaking news across the internet.
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Twitter/X</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Monitors trending hashtags and conversations on Twitter/X to discover 
+                    viral topics and emerging trends across industries.
                   </p>
                 </div>
               </div>
@@ -957,17 +947,17 @@ export default function SourcesSettingsPage() {
                         ? getCombinedSubreddits(industry) 
                         : getCombinedSubreddits(industry)?.slice(0, 5)
                       )?.map((subreddit) => (
-                        <div key={`${industry}-${subreddit}`} className="flex items-center justify-between p-2 border rounded">
+                        <div key={`${industry}-${subreddit}`} className="flex items-center justify-between p-3 border rounded">
                           <div className="flex items-center gap-2">
                             <input 
                               type="checkbox" 
                               checked={enabledSubreddits[subreddit] !== false}
                               onChange={(e) => handleToggleSubreddit(subreddit, e.target.checked)}
-                              className="rounded" 
+                              className="rounded h-4 w-4" 
                             />
-                            <span className="text-sm">r/{subreddit}</span>
+                            <span className="text-sm font-medium">r/{subreddit}</span>
                           </div>
-                          <Badge variant={enabledSubreddits[subreddit] !== false ? "default" : "outline"} className="text-xs">
+                          <Badge variant={enabledSubreddits[subreddit] !== false ? "default" : "secondary"} className="text-xs">
                             {enabledSubreddits[subreddit] !== false ? "Active" : "Disabled"}
                           </Badge>
                         </div>
@@ -1001,17 +991,17 @@ export default function SourcesSettingsPage() {
                             ? getCombinedSubreddits(industry) 
                             : getCombinedSubreddits(industry)?.slice(0, 5)
                           )?.map((subreddit) => (
-                            <div key={`${industry}-${subreddit}`} className="flex items-center justify-between p-2 border rounded">
+                            <div key={`${industry}-${subreddit}`} className="flex items-center justify-between p-3 border rounded">
                               <div className="flex items-center gap-2">
                                 <input 
                                   type="checkbox" 
                                   checked={enabledSubreddits[subreddit] !== false}
                                   onChange={(e) => handleToggleSubreddit(subreddit, e.target.checked)}
-                                  className="rounded" 
+                                  className="rounded h-4 w-4" 
                                 />
-                                <span className="text-sm">r/{subreddit}</span>
+                                <span className="text-sm font-medium">r/{subreddit}</span>
                               </div>
-                              <Badge variant={enabledSubreddits[subreddit] !== false ? "default" : "outline"} className="text-xs">
+                              <Badge variant={enabledSubreddits[subreddit] !== false ? "default" : "secondary"} className="text-xs">
                                 {enabledSubreddits[subreddit] !== false ? "Active" : "Disabled"}
                               </Badge>
                             </div>
@@ -1180,114 +1170,7 @@ export default function SourcesSettingsPage() {
             ? "flex-1 min-h-0 overflow-auto pb-4" 
             : "space-y-6"
         )}>
-          <div className={cn(isMobile && "space-y-4")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Hash className="h-5 w-5" />
-                Twitter/X Hashtag Monitoring
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Configure hashtags to monitor on Twitter/X for trending topics and conversations.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Coming Soon Notice */}
-              <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center">
-                <Hash className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="font-semibold mb-2">Twitter/X Integration Coming Soon</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  We&apos;re working on integrating Twitter/X API to monitor hashtags and trending topics.
-                  This feature will allow you to track specific hashtags and discover trending conversations.
-                </p>
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground font-medium">Planned Features:</p>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>• Monitor specific hashtags (#AI, #tech, #innovation)</li>
-                    <li>• Track hashtag popularity and engagement</li>
-                    <li>• Discover trending hashtags in real-time</li>
-                    <li>• Filter by location and language</li>
-                    <li>• Analyze hashtag sentiment and reach</li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Placeholder Interface - Dynamic based on INDUSTRIES */}
-              <div className="space-y-4 opacity-50">
-                <h3 className="font-semibold text-sm">Hashtag Categories (Preview)</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {INDUSTRIES.slice(0, 6).map((industry) => (
-                    <div key={industry} className="space-y-3">
-                      <h4 className="font-medium text-sm">{INDUSTRY_LABELS[industry]}</h4>
-                      <div className="space-y-2">
-                        {INDUSTRY_HASHTAGS[industry]?.slice(0, 4).map((hashtag) => (
-                          <div key={hashtag} className="flex items-center justify-between p-2 border rounded">
-                            <div className="flex items-center gap-2">
-                              <input type="checkbox" disabled className="rounded" />
-                              <span className="text-sm">{hashtag}</span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">Coming Soon</Badge>
-                          </div>
-                        ))}
-                        {INDUSTRY_HASHTAGS[industry]?.length > 4 && (
-                          <div className="text-xs text-muted-foreground pl-6">
-                            +{INDUSTRY_HASHTAGS[industry].length - 4} more...
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Additional industries note */}
-                <div className="text-center py-4 border-t border-dashed">
-                  <p className="text-xs text-muted-foreground">
-                    All {INDUSTRIES.length} industry categories will be available with hashtag management
-                  </p>
-                </div>
-
-                {/* Industry-based custom hashtags */}
-                <div className="space-y-4">
-                  <h4 className="font-medium text-sm">Add Hashtags by Industry</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Select Industry</label>
-                      <select className="w-full px-3 py-2 border rounded-md text-sm" disabled>
-                        <option value="">Choose an industry...</option>
-                        {INDUSTRIES.map((industry) => (
-                          <option key={industry} value={industry}>
-                            {INDUSTRY_LABELS[industry]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Custom Hashtag</label>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="Enter hashtag (e.g., #innovation)"
-                          className="flex-1 px-3 py-2 border rounded-md text-sm"
-                          disabled
-                        />
-                        <Button disabled>Add Hashtag</Button>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Organize hashtags by industry to match your content generation preferences.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button disabled>Enable Twitter/X Integration</Button>
-                <Button variant="outline" disabled>Configure API Keys</Button>
-              </div>
-            </CardContent>
-          </Card>
-          </div>
+          <TwitterHashtagManager />
         </TabsContent>
       </Tabs>
     </div>

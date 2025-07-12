@@ -276,3 +276,56 @@ export interface CustomCategoryMappingCreate {
   category: string;
   industries: string[];
 }
+
+// Twitter/X hashtag monitoring types
+export interface UserHashtag {
+  id: string;
+  hashtag: string;
+  industry: string;
+  enabled: boolean;
+  is_custom: boolean;
+  track_sentiment: boolean;
+  min_engagement: number;
+  exclude_retweets: boolean;
+  exclude_replies: boolean;
+  language_filter?: string;
+  include_keywords: string[];
+  exclude_keywords: string[];
+  trends_discovered: number;
+  avg_trend_score: number;
+  last_fetch_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TwitterSourceConfig {
+  enabled: boolean;
+  weight: number;
+  max_hashtags_per_industry: number;
+  default_min_engagement: number;
+  default_language_filter: string;
+  rate_limit_per_hour: number;
+}
+
+// Updated source configuration to include Twitter
+export interface SourceConfiguration {
+  enabled_sources: {
+    reddit: boolean;
+    linkup: boolean;
+    rss_feeds: boolean;
+    twitter: boolean;
+  };
+  source_weights: {
+    reddit: number;
+    linkup: number;
+    rss_feeds: number;
+    twitter: number;
+  };
+  rss_preferences: {
+    enabled_feed_ids: string[];
+  };
+  twitter_preferences?: {
+    enabled_hashtag_ids: string[];
+  };
+  max_trends_per_source: number;
+}

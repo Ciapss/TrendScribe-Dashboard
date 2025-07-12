@@ -29,6 +29,7 @@ import {
   SidebarMenuItem,
   SidebarMenuBadge,
   SidebarHeader,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -78,6 +79,7 @@ export function AppSidebar() {
   const pathname = usePathname()
   const [processingCount, setProcessingCount] = useState(0)
   const { user, logout } = useAuth()
+  const { setOpenMobile } = useSidebar()
 
   const settingsItems = [
     {
@@ -140,7 +142,7 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={pathname === item.url}>
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={() => setOpenMobile(false)}>
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
@@ -160,7 +162,7 @@ export function AppSidebar() {
               {settingsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={pathname === item.url}>
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={() => setOpenMobile(false)}>
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
@@ -205,7 +207,7 @@ export function AppSidebar() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="flex items-center">
+                  <Link href="/profile" className="flex items-center" onClick={() => setOpenMobile(false)}>
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </Link>

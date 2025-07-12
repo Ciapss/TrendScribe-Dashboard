@@ -391,392 +391,368 @@ export function GenerationForm({ children }: GenerationFormProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className={cn(
-        "w-full max-w-7xl p-0",
-        isMobile 
-          ? "max-w-full h-[100dvh] w-screen rounded-none m-0 border-0" 
-          : "max-h-[90vh] h-full"
-      )}>
-        <DialogHeader className={cn("p-4 sm:p-6 border-b", isMobile && "sticky top-0 bg-background z-20 shrink-0")}>
-          <DialogTitle className="text-lg sm:text-xl">Generate New Blog Post</DialogTitle>
-          <DialogDescription className="text-sm">
+      <DialogContent className="w-full max-w-4xl p-0 max-h-[90vh] h-[90vh] flex flex-col">
+        <DialogHeader className="p-6 border-b shrink-0">
+          <DialogTitle className="text-xl">Generate New Blog Post</DialogTitle>
+          <DialogDescription>
             Generate a blog post from trending topics or provide your own custom topic. Configure the parameters below.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className={cn(
-            "flex",
-            isMobile 
-              ? "flex-col h-[calc(100dvh-120px)]" 
-              : form.watch("generationType") === "trending_select" 
-                ? "gap-6 h-[calc(90vh-120px)]" 
-                : "flex-col h-[calc(90vh-120px)]"
-          )}>
-            {/* Form Controls */}
-            <div className={cn(
-              "space-y-4 sm:space-y-6 overflow-y-auto p-4 sm:p-6",
-              isMobile && "flex-1 min-h-0",
-              !isMobile && form.watch("generationType") === "trending_select" && "w-1/3 border-r",
-              !isMobile && form.watch("generationType") !== "trending_select" && "max-w-2xl mx-auto flex-1"
-            )}>
-              {/* Generation Type Selection */}
-              <FormField
-                control={form.control}
-                name="generationType"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>How would you like to generate your post?</FormLabel>
-                    <FormControl>
-                      <RadioGroup
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        className="flex flex-col space-y-2"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="trending" id="trending" />
-                          <label htmlFor="trending" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                            Auto-generate from trending topics
-                          </label>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-6">
-                          AI will automatically discover and select the best trending topic in your industry
-                        </p>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="trending_select" id="trending_select" />
-                          <label htmlFor="trending_select" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                            Choose from trending topics
-                          </label>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-6">
-                          Browse and select specific trending topics that interest you
-                        </p>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="custom" id="custom" />
-                          <label htmlFor="custom" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                            Generate from custom topic
-                          </label>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-6">
-                          Provide your own specific topic or subject to write about
-                        </p>
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Source Selection - Available for all generation types */}
-              <div className="space-y-2">
-                <Separator />
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Data Sources</Label>
-                  <FormDescription className="text-xs">
-                    Select which sources to use for discovering trends and researching content
-                  </FormDescription>
-                  <SourceSelector 
-                    showWeights={false}
-                    compact={true}
-                  />
-                </div>
-                <Separator />
-              </div>
-
-              {/* Industry Selection - Only show when generating from trending topics */}
-              {form.watch("generationType") === "trending" && (
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full">
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6 space-y-6">
+                {/* Generation Type Selection */}
                 <FormField
                   control={form.control}
-                  name="industry"
+                  name="generationType"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <FormLabel>How would you like to generate your post?</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex flex-col space-y-2"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="trending" id="trending" />
+                            <label htmlFor="trending" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                              Auto-generate from trending topics
+                            </label>
+                          </div>
+                          <p className="text-xs text-muted-foreground ml-6">
+                            AI will automatically discover and select the best trending topic in your industry
+                          </p>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="trending_select" id="trending_select" />
+                            <label htmlFor="trending_select" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                              Choose from trending topics
+                            </label>
+                          </div>
+                          <p className="text-xs text-muted-foreground ml-6">
+                            Browse and select specific trending topics that interest you
+                          </p>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="custom" id="custom" />
+                            <label htmlFor="custom" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                              Generate from custom topic
+                            </label>
+                          </div>
+                          <p className="text-xs text-muted-foreground ml-6">
+                            Provide your own specific topic or subject to write about
+                          </p>
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Source Selection - Available for all generation types */}
+                <div className="space-y-2">
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Data Sources</Label>
+                    <FormDescription className="text-xs">
+                      Select which sources to use for discovering trends and researching content
+                    </FormDescription>
+                    <SourceSelector 
+                      showWeights={false}
+                      compact={true}
+                    />
+                  </div>
+                  <Separator />
+                </div>
+
+                {/* Industry Selection - Only show when generating from trending topics */}
+                {form.watch("generationType") === "trending" && (
+                  <FormField
+                    control={form.control}
+                    name="industry"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Industry *</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select an industry" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent side="bottom" sideOffset={4}>
+                            {industriesLoading ? (
+                              <div className="flex items-center justify-center py-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span className="ml-2 text-sm">Loading industries...</span>
+                              </div>
+                            ) : (
+                              industries.map((industry) => (
+                                <SelectItem key={industry.id} value={industry.id}>
+                                  {industry.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Choose the industry to discover trending topics from
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Custom Topic - Only show when custom generation is selected */}
+                {form.watch("generationType") === "custom" && (
+                  <FormField
+                    control={form.control}
+                    name="customTopic"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Custom Topic *</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Enter the specific topic you'd like to write about..."
+                            className="min-h-[80px]"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Be specific about the topic, angle, or perspective you want to explore
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Language Selection */}
+                <FormField
+                  control={form.control}
+                  name="language"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Industry *</FormLabel>
+                      <FormLabel>Language *</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select an industry" />
+                            <SelectValue placeholder="Select a language" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent side="bottom" sideOffset={4}>
-                          {industriesLoading ? (
-                            <div className="flex items-center justify-center py-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span className="ml-2 text-sm">Loading industries...</span>
-                            </div>
-                          ) : (
-                            industries.map((industry) => (
-                              <SelectItem key={industry.id} value={industry.id}>
-                                {industry.name}
-                              </SelectItem>
-                            ))
-                          )}
+                          {LANGUAGES.map((language) => (
+                            <SelectItem key={language} value={language}>
+                              {LANGUAGE_LABELS[language]}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormDescription>
-                        Choose the industry to discover trending topics from
+                        Choose the language for your blog post
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              )}
 
-              {/* Custom Topic - Only show when custom generation is selected */}
-              {form.watch("generationType") === "custom" && (
+                {/* Blog Type Selection */}
                 <FormField
                   control={form.control}
-                  name="customTopic"
+                  name="blogType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Custom Topic *</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Enter the specific topic you'd like to write about..."
-                          className="min-h-[80px]"
-                          {...field}
-                        />
-                      </FormControl>
+                      <FormLabel>Blog Post Type *</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a blog post type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent side="bottom" sideOffset={4}>
+                          {BLOG_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {BLOG_TYPE_LABELS[type]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormDescription>
-                        Be specific about the topic, angle, or perspective you want to explore
+                        Choose the style and format for your blog post
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              )}
 
-              {/* Language Selection */}
-              <FormField
-                control={form.control}
-                name="language"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Language *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                {/* Comprehensive Research */}
+                <FormField
+                  control={form.control}
+                  name="enableComprehensiveResearch"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5">
+                        <FormLabel>Comprehensive Research Mode</FormLabel>
+                        <FormDescription>
+                          Enable deeper research with more sources (increases generation time and cost)
+                        </FormDescription>
+                      </div>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a language" />
-                        </SelectTrigger>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
                       </FormControl>
-                      <SelectContent side="bottom" sideOffset={4}>
-                        {LANGUAGES.map((language) => (
-                          <SelectItem key={language} value={language}>
-                            {LANGUAGE_LABELS[language]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Choose the language for your blog post
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    </FormItem>
+                  )}
+                />
 
-              {/* Blog Type Selection */}
-              <FormField
-                control={form.control}
-                name="blogType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Blog Post Type *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a blog post type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent side="bottom" sideOffset={4}>
-                        {BLOG_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {BLOG_TYPE_LABELS[type]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Choose the style and format for your blog post
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Comprehensive Research */}
-              <FormField
-                control={form.control}
-                name="enableComprehensiveResearch"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel>Comprehensive Research Mode</FormLabel>
-                      <FormDescription>
-                        Enable deeper research with more sources (increases generation time and cost)
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              {/* Estimated Generation Time */}
-              <div className="bg-muted/50 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Estimated Generation Time</span>
-                  <Badge variant="secondary">
-                    {form.watch("enableComprehensiveResearch") ? "4-6 minutes" : "3-4 minutes"}
-                  </Badge>
+                {/* Estimated Generation Time */}
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Estimated Generation Time</span>
+                    <Badge variant="secondary">
+                      {form.watch("enableComprehensiveResearch") ? "4-6 minutes" : "3-4 minutes"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Time may vary based on topic complexity and current system load
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Time may vary based on topic complexity and current system load
-                </p>
               </div>
-
             </div>
 
-            {/* Trend Selector Section */}
+            {/* Trend Selector Section - Show within the same scroll area */}
             {form.watch("generationType") === "trending_select" && (
-              <div className={cn(
-                "space-y-4 overflow-y-auto",
-                isMobile ? "p-4 sm:p-6 border-t flex-1 min-h-0" : "w-2/3 p-6 flex-1"
-              )}>
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-blue-500" />
-                  <h3 className="text-lg font-semibold">Choose from Trending Topics</h3>
-                  {isDiscoveryActive && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Discovering topics...
-                    </div>
-                  )}
-                  {usingSyncMode && (
-                    <div className="flex items-center gap-2 text-sm text-orange-600">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Discovering (sync mode)...
-                    </div>
-                  )}
-                </div>
+              <div className="border-t bg-muted/30">
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-blue-500" />
+                    <h3 className="text-lg font-semibold">Choose from Trending Topics</h3>
+                    {isDiscoveryActive && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Discovering topics...
+                      </div>
+                    )}
+                    {usingSyncMode && (
+                      <div className="flex items-center gap-2 text-sm text-orange-600">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Discovering (sync mode)...
+                      </div>
+                    )}
+                  </div>
 
-                {/* Discovery Job Status */}
-                {discoveryJob && isDiscoveryActive && (
-                  <div className="p-3 border rounded-lg bg-blue-50 border-blue-200">
-                    <div className="flex items-center justify-between">
+                  {/* Discovery Job Status */}
+                  {discoveryJob && isDiscoveryActive && (
+                    <div className="p-3 border rounded-lg bg-blue-50 border-blue-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                          <span className="text-sm font-medium text-blue-800">
+                            Discovering trending topics for {trendFilters.industry}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // Remove from storage and cancel job
+                            if (discoveryJobId) {
+                              DiscoveryJobStorage.updateJobStatus(discoveryJobId, 'cancelled')
+                            }
+                            cancelDiscoveryJob()
+                          }}
+                          className="h-7 text-xs"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                      <div className="mt-2 text-xs text-blue-700">
+                        Job ID: {discoveryJobId} - You can close this dialog and check the Jobs page for progress.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Job Recovery Notice */}
+                  {discoveryJobId && !discoveryJob && (
+                    <div className="p-3 border rounded-lg bg-green-50 border-green-200">
                       <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                        <span className="text-sm font-medium text-blue-800">
-                          Discovering trending topics for {trendFilters.industry}
+                        <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                        <span className="text-sm font-medium text-green-800">
+                          Reconnected to discovery job for {trendFilters.industry}
                         </span>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          // Remove from storage and cancel job
-                          if (discoveryJobId) {
-                            DiscoveryJobStorage.updateJobStatus(discoveryJobId, 'cancelled')
-                          }
-                          cancelDiscoveryJob()
-                        }}
-                        className="h-7 text-xs"
-                      >
-                        Cancel
-                      </Button>
+                      <div className="mt-2 text-xs text-green-700">
+                        Job ID: {discoveryJobId} - Checking status...
+                      </div>
                     </div>
-                    <div className="mt-2 text-xs text-blue-700">
-                      Job ID: {discoveryJobId} - You can close this dialog and check the Jobs page for progress.
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Job Recovery Notice */}
-                {discoveryJobId && !discoveryJob && (
-                  <div className="p-3 border rounded-lg bg-green-50 border-green-200">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-green-600" />
-                      <span className="text-sm font-medium text-green-800">
-                        Reconnected to discovery job for {trendFilters.industry}
-                      </span>
+                  {/* Sync Mode Status */}
+                  {usingSyncMode && (
+                    <div className="p-3 border rounded-lg bg-orange-50 border-orange-200">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-orange-600" />
+                        <span className="text-sm font-medium text-orange-800">
+                          Discovering trending topics for {trendFilters.industry} (Direct Mode)
+                        </span>
+                      </div>
+                      <div className="mt-2 text-xs text-orange-700">
+                        Running in direct mode - async job system not available. Please wait...
+                      </div>
                     </div>
-                    <div className="mt-2 text-xs text-green-700">
-                      Job ID: {discoveryJobId} - Checking status...
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Sync Mode Status */}
-                {usingSyncMode && (
-                  <div className="p-3 border rounded-lg bg-orange-50 border-orange-200">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-orange-600" />
-                      <span className="text-sm font-medium text-orange-800">
-                        Discovering trending topics for {trendFilters.industry} (Direct Mode)
-                      </span>
-                    </div>
-                    <div className="mt-2 text-xs text-orange-700">
-                      Running in direct mode - async job system not available. Please wait...
-                    </div>
-                  </div>
-                )}
-
-                <TrendSelector
-                  trends={trends}
-                  selectedTrendIds={form.watch("selectedTrendIds") || []}
-                  onTrendSelection={(trendIds) => form.setValue("selectedTrendIds", trendIds)}
-                  loading={trendsLoading || isDiscoveryActive || usingSyncMode}
-                  error={(trendsError || discoveryJobError?.message) || undefined}
-                  totalCount={totalCount}
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                  filters={trendFilters}
-                  onFiltersChange={setTrendFilters}
-                  onLoadTopics={() => loadTrends(true)}
-                  disabled={isDiscoveryActive || usingSyncMode}
-                />
-                {form.formState.errors.selectedTrendIds && (
-                  <p className="text-sm text-destructive">
-                    Please select at least one trending topic to continue
-                  </p>
-                )}
+                  <TrendSelector
+                    trends={trends}
+                    selectedTrendIds={form.watch("selectedTrendIds") || []}
+                    onTrendSelection={(trendIds) => form.setValue("selectedTrendIds", trendIds)}
+                    loading={trendsLoading || isDiscoveryActive || usingSyncMode}
+                    error={(trendsError || discoveryJobError?.message) || undefined}
+                    totalCount={totalCount}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    filters={trendFilters}
+                    onFiltersChange={setTrendFilters}
+                    onLoadTopics={() => loadTrends(true)}
+                    disabled={isDiscoveryActive || usingSyncMode}
+                  />
+                  {form.formState.errors.selectedTrendIds && (
+                    <p className="text-sm text-destructive">
+                      Please select at least one trending topic to continue
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Fixed Footer with Submit Buttons */}
-            <div className={cn(
-              "border-t bg-background p-4 sm:p-6 flex gap-2 justify-end shrink-0",
-              isMobile && "sticky bottom-0 z-10"
-            )}>
+            <div className="border-t bg-background p-6 flex gap-3 justify-end shrink-0">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setOpen(false)}
-                className={cn(isMobile && "flex-1 min-h-[44px]")}
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 disabled={isGenerating}
-                className={cn(isMobile && "flex-1 min-h-[44px]")}
               >
                 {isGenerating ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    <span className={cn(isMobile && "hidden sm:inline")}>Starting Generation...</span>
-                    {isMobile && <span className="sm:hidden">Starting...</span>}
+                    Starting Generation...
                   </>
                 ) : (
                   <>
                     <Plus className="mr-2 h-4 w-4" />
-                    <span className={cn(isMobile && "hidden sm:inline")}>Generate Post</span>
-                    {isMobile && <span className="sm:hidden">Generate</span>}
+                    Generate
                   </>
                 )}
               </Button>
