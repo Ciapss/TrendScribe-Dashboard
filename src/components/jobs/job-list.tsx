@@ -25,7 +25,7 @@ import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/components/auth/auth-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
 interface JobListProps {
