@@ -15,8 +15,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils"
 
 export default function IndustriesPage() {
+  const isMobile = useIsMobile()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
@@ -46,25 +49,33 @@ export default function IndustriesPage() {
                 Create Industry
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
+            <DialogContent className={cn(
+              "max-w-2xl p-0",
+              isMobile && "max-w-full h-[100dvh] w-screen rounded-none m-0 border-0"
+            )}>
+              <DialogHeader className={cn("p-4 sm:p-6 border-b", isMobile && "sticky top-0 bg-background z-10")}>
                 <DialogTitle>Create Custom Industry</DialogTitle>
                 <DialogDescription>
                   Define a new industry with specific keywords, categories, and sources.
                 </DialogDescription>
               </DialogHeader>
-              <IndustryCreateForm 
-                onSuccess={handleIndustryCreated}
-                onCancel={() => setCreateDialogOpen(false)}
-              />
+              <div className={cn(
+                "overflow-y-auto p-4 sm:p-6",
+                isMobile ? "h-[calc(100dvh-120px)]" : "max-h-[70vh]"
+              )}>
+                <IndustryCreateForm 
+                  onSuccess={handleIndustryCreated}
+                  onCancel={() => setCreateDialogOpen(false)}
+                />
+              </div>
             </DialogContent>
           </Dialog>
         </div>
 
-        <IndustryStats key={refreshTrigger} />
+        <IndustryStats key={`stats-${refreshTrigger}`} />
         
         <IndustryList 
-          key={refreshTrigger}
+          key={`list-${refreshTrigger}`}
           onIndustryUpdated={handleIndustryUpdated}
         />
       </div>

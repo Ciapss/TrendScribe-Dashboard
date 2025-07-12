@@ -21,18 +21,30 @@ import {
   ChevronUp,
   Send,
   Loader2,
+  MoreHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { BlogPost } from "@/types";
 import { INDUSTRY_LABELS } from "@/lib/constants";
 import { apiClient } from "@/lib/api-client";
 import Link from "next/link";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface PostDetailProps {
   postId: string;
 }
 
 export function PostDetail({ postId }: PostDetailProps) {
+  const isMobile = useIsMobile();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -201,50 +213,99 @@ export function PostDetail({ postId }: PostDetailProps) {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" asChild>
+      <div className={cn(
+        "flex items-center justify-between",
+        isMobile && "flex-col gap-4 items-stretch"
+      )}>
+        <Button variant="ghost" size="sm" asChild className={cn(isMobile && "self-start")}>
           <Link href="/posts">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Posts
           </Link>
         </Button>
 
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="default" 
-            size="sm" 
-            onClick={handlePublishToWebsite}
-            disabled={publishing}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            {publishing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="mr-2 h-4 w-4" />
-            )}
-            {publishing ? 'Publishing...' : 'Publish to Website'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleCopyContent}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copy Content
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleExport("md")}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export MD
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleExport("txt")}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export TXT
-          </Button>
-        </div>
+        {isMobile ? (
+          /* Mobile Layout - Show primary action and dropdown */
+          <div className="flex gap-2">
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={handlePublishToWebsite}
+              disabled={publishing}
+              className="bg-green-600 hover:bg-green-700 flex-1 min-h-[44px]"
+            >
+              {publishing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {publishing ? 'Publishing...' : 'Publish'}
+            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="min-h-[44px] min-w-[44px]">
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">More actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleCopyContent}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Content
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleExport("md")}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("txt")}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Text
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : (
+          /* Desktop Layout - Show all buttons */
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={handlePublishToWebsite}
+              disabled={publishing}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {publishing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {publishing ? 'Publishing...' : 'Publish to Website'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCopyContent}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy Content
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExport("md")}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export MD
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExport("txt")}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export TXT
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Publish Result Notification */}
@@ -272,9 +333,12 @@ export function PostDetail({ postId }: PostDetailProps) {
       )}
 
       {/* Main Content */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className={cn(
+        "grid gap-6",
+        isMobile ? "grid-cols-1" : "lg:grid-cols-3"
+      )}>
         {/* Content */}
-        <div className="lg:col-span-2">
+        <div className={cn(isMobile ? "col-span-1" : "lg:col-span-2")}>
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">{post.title}</CardTitle>

@@ -35,11 +35,11 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
         <AppSidebar />
         <main className="flex-1 overflow-hidden">
           <div className="flex h-full flex-col">
-            <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-6">
-              <SidebarTrigger className="cursor-pointer -ml-3" />
-              <h1 className="text-lg font-semibold">TrendScribe Dashboard</h1>
+            <header className="flex h-14 sm:h-16 items-center gap-2 sm:gap-4 border-b bg-muted/40 px-3 sm:px-6">
+              <SidebarTrigger className="cursor-pointer -ml-1 sm:-ml-3 min-w-[44px] min-h-[44px] sm:min-w-auto sm:min-h-auto" />
+              <h1 className="text-base sm:text-lg font-semibold truncate">TrendScribe Dashboard</h1>
             </header>
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto p-3 sm:p-6">
               <PageTransition>
                 {children}
               </PageTransition>

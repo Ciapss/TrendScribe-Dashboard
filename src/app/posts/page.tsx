@@ -9,7 +9,7 @@ import { useState } from "react"
 export default function PostsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [industryFilter, setIndustryFilter] = useState("")
-  const [sortBy, setSortBy] = useState("")
+  const [sortBy, setSortBy] = useState("date-desc")
 
   return (
     <RouteGuard requireAuth={true}>

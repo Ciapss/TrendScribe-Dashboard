@@ -25,9 +25,169 @@ import {
   Alert,
   AlertDescription,
 } from "@/components/ui/alert"
+import { useIsMobile } from "@/hooks/use-mobile"
 
+function MobileApiKeyCard({ apiKey, visibleKeys, operationLoading, onToggleVisibility, onCopyKey, onRevokeKey, onDeleteKey }: {
+  apiKey: APIKey
+  visibleKeys: Set<string>
+  operationLoading: Set<string>
+  onToggleVisibility: (keyId: string) => void
+  onCopyKey: (key: string) => void
+  onRevokeKey: (keyId: string) => void
+  onDeleteKey: (keyId: string) => void
+}) {
+  const getPermissionBadges = (permissions: APIKey['permissions']) => {
+    const badges = []
+    if (permissions.readPosts) badges.push({ label: "Read", color: "bg-blue-100 text-blue-800" })
+    if (permissions.generatePosts) badges.push({ label: "Generate", color: "bg-green-100 text-green-800" })
+    if (permissions.manageWebhooks) badges.push({ label: "Webhooks", color: "bg-purple-100 text-purple-800" })
+    return badges
+  }
+
+  const isExpired = (key: APIKey) => {
+    if (!key.expiresAt) return false
+    const expiryDate = typeof key.expiresAt === 'string' ? new Date(key.expiresAt) : key.expiresAt
+    return expiryDate < new Date()
+  }
+
+  const formatDate = (date: Date | string | undefined) => {
+    if (!date) return "Never"
+    const dateObj = typeof date === 'string' ? new Date(date) : date
+    return dateObj.toLocaleDateString()
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-3">
+        {/* Name and Status */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-sm">{apiKey.name}</h3>
+            {apiKey.expiresAt && (
+              <div className="text-xs text-muted-foreground">
+                Expires: {formatDate(apiKey.expiresAt)}
+              </div>
+            )}
+          </div>
+          <Badge 
+            variant="outline" 
+            className={
+              isExpired(apiKey)
+                ? "text-red-700 border-red-200 bg-red-50"
+                : apiKey.isActive 
+                ? "text-green-700 border-green-200 bg-green-50" 
+                : "text-gray-700 border-gray-200 bg-gray-50"
+            }
+          >
+            {isExpired(apiKey) ? "Expired" : apiKey.isActive ? "Active" : "Revoked"}
+          </Badge>
+        </div>
+
+        {/* API Key */}
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground">API Key</div>
+          <div className="flex items-center gap-2">
+            <code className="text-xs font-mono flex-1 truncate p-2 bg-muted rounded">
+              {visibleKeys.has(apiKey.id) ? apiKey.key : apiKey.keyPreview}
+            </code>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onToggleVisibility(apiKey.id)}
+              className="min-w-[44px] min-h-[44px] sm:min-w-auto sm:min-h-auto"
+            >
+              {visibleKeys.has(apiKey.id) ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onCopyKey(apiKey.key)}
+              className="min-w-[44px] min-h-[44px] sm:min-w-auto sm:min-h-auto"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Permissions */}
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground">Permissions</div>
+          <div className="flex flex-wrap gap-1">
+            {getPermissionBadges(apiKey.permissions).map((badge, index) => (
+              <Badge key={index} variant="outline" className={`text-xs ${badge.color} border-current`}>
+                {badge.label}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <div className="text-muted-foreground">Created</div>
+            <div>{formatDate(apiKey.createdAt)}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Last Used</div>
+            <div>{formatDate(apiKey.lastUsedAt)}</div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-2 border-t">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onCopyKey(apiKey.key)}
+            className="flex-1 min-h-[44px]"
+          >
+            <Copy className="h-4 w-4 mr-2" />
+            Copy Key
+          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                disabled={operationLoading.has(apiKey.id)}
+                className="min-w-[44px] min-h-[44px]"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {apiKey.isActive && !isExpired(apiKey) && (
+                <DropdownMenuItem 
+                  onClick={() => onRevokeKey(apiKey.id)}
+                  className="text-orange-600"
+                  disabled={operationLoading.has(apiKey.id)}
+                >
+                  {operationLoading.has(apiKey.id) ? 'Revoking...' : 'Revoke'}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem 
+                onClick={() => onDeleteKey(apiKey.id)}
+                className="text-red-600"
+                disabled={operationLoading.has(apiKey.id)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {operationLoading.has(apiKey.id) ? 'Deleting...' : 'Delete'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </Card>
+  )
+}
 
 export function ApiKeysTable() {
+  const isMobile = useIsMobile()
   const [apiKeys, setApiKeys] = useState<APIKey[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -202,10 +362,10 @@ export function ApiKeysTable() {
               size="sm"
               onClick={fetchApiKeys}
               disabled={loading}
-              className="gap-2"
+              className="gap-2 min-h-[44px] sm:min-h-auto"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
           </div>
         </CardHeader>
@@ -226,129 +386,150 @@ export function ApiKeysTable() {
               </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Key</TableHead>
-                    <TableHead>Permissions</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Last Used</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <>
+              {isMobile ? (
+                /* Mobile Card Layout */
+                <div className="space-y-3">
                   {apiKeys.map((apiKey) => (
-                  <TableRow key={apiKey.id}>
-                    <TableCell>
-                      <div className="font-medium">{apiKey.name}</div>
-                      {apiKey.expiresAt && (
-                        <div className="text-xs text-muted-foreground">
-                          Expires: {formatDate(apiKey.expiresAt)}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2 max-w-[200px]">
-                        <code className="text-xs font-mono truncate">
-                          {visibleKeys.has(apiKey.id) ? apiKey.key : apiKey.keyPreview}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleVisibility(apiKey.id)}
-                        >
-                          {visibleKeys.has(apiKey.id) ? (
-                            <EyeOff className="h-3 w-3" />
-                          ) : (
-                            <Eye className="h-3 w-3" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCopyKey(apiKey.key)}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {getPermissionBadges(apiKey.permissions).map((badge, index) => (
-                          <Badge key={index} variant="outline" className={`text-xs ${badge.color} border-current`}>
-                            {badge.label}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {formatDate(apiKey.createdAt)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {formatDate(apiKey.lastUsedAt)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant="outline" 
-                        className={
-                          isExpired(apiKey)
-                            ? "text-red-700 border-red-200 bg-red-50"
-                            : apiKey.isActive 
-                            ? "text-green-700 border-green-200 bg-green-50" 
-                            : "text-gray-700 border-gray-200 bg-gray-50"
-                        }
-                      >
-                        {isExpired(apiKey) ? "Expired" : apiKey.isActive ? "Active" : "Revoked"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            disabled={operationLoading.has(apiKey.id)}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleCopyKey(apiKey.key)}>
-                            <Copy className="mr-2 h-4 w-4" />
-                            Copy Key
-                          </DropdownMenuItem>
-                          {apiKey.isActive && !isExpired(apiKey) && (
-                            <DropdownMenuItem 
-                              onClick={() => handleRevokeKey(apiKey.id)}
-                              className="text-orange-600"
-                              disabled={operationLoading.has(apiKey.id)}
-                            >
-                              {operationLoading.has(apiKey.id) ? 'Revoking...' : 'Revoke'}
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteKey(apiKey.id)}
-                            className="text-red-600"
-                            disabled={operationLoading.has(apiKey.id)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            {operationLoading.has(apiKey.id) ? 'Deleting...' : 'Delete'}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                    <MobileApiKeyCard
+                      key={apiKey.id}
+                      apiKey={apiKey}
+                      visibleKeys={visibleKeys}
+                      operationLoading={operationLoading}
+                      onToggleVisibility={handleToggleVisibility}
+                      onCopyKey={handleCopyKey}
+                      onRevokeKey={handleRevokeKey}
+                      onDeleteKey={handleDeleteKey}
+                    />
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                </div>
+              ) : (
+                /* Desktop Table Layout */
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Key</TableHead>
+                        <TableHead>Permissions</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Last Used</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {apiKeys.map((apiKey) => (
+                      <TableRow key={apiKey.id}>
+                        <TableCell>
+                          <div className="font-medium">{apiKey.name}</div>
+                          {apiKey.expiresAt && (
+                            <div className="text-xs text-muted-foreground">
+                              Expires: {formatDate(apiKey.expiresAt)}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2 max-w-[200px]">
+                            <code className="text-xs font-mono truncate">
+                              {visibleKeys.has(apiKey.id) ? apiKey.key : apiKey.keyPreview}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleVisibility(apiKey.id)}
+                            >
+                              {visibleKeys.has(apiKey.id) ? (
+                                <EyeOff className="h-3 w-3" />
+                              ) : (
+                                <Eye className="h-3 w-3" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCopyKey(apiKey.key)}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {getPermissionBadges(apiKey.permissions).map((badge, index) => (
+                              <Badge key={index} variant="outline" className={`text-xs ${badge.color} border-current`}>
+                                {badge.label}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {formatDate(apiKey.createdAt)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {formatDate(apiKey.lastUsedAt)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              isExpired(apiKey)
+                                ? "text-red-700 border-red-200 bg-red-50"
+                                : apiKey.isActive 
+                                ? "text-green-700 border-green-200 bg-green-50" 
+                                : "text-gray-700 border-gray-200 bg-gray-50"
+                            }
+                          >
+                            {isExpired(apiKey) ? "Expired" : apiKey.isActive ? "Active" : "Revoked"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                disabled={operationLoading.has(apiKey.id)}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleCopyKey(apiKey.key)}>
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy Key
+                              </DropdownMenuItem>
+                              {apiKey.isActive && !isExpired(apiKey) && (
+                                <DropdownMenuItem 
+                                  onClick={() => handleRevokeKey(apiKey.id)}
+                                  className="text-orange-600"
+                                  disabled={operationLoading.has(apiKey.id)}
+                                >
+                                  {operationLoading.has(apiKey.id) ? 'Revoking...' : 'Revoke'}
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem 
+                                onClick={() => handleDeleteKey(apiKey.id)}
+                                className="text-red-600"
+                                disabled={operationLoading.has(apiKey.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {operationLoading.has(apiKey.id) ? 'Deleting...' : 'Delete'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

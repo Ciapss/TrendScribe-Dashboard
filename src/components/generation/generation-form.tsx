@@ -46,6 +46,7 @@ import { SourceSelector } from "@/components/sources/source-selector"
 import { Separator } from "@/components/ui/separator"
 import { useJobPolling } from "@/hooks/use-job-polling"
 import { DiscoveryJobStorage } from "@/utils/discovery-job-storage"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 const formSchema = z.object({
   generationType: z.enum(["trending", "trending_select", "custom"], {
@@ -83,6 +84,7 @@ interface GenerationFormProps {
 }
 
 export function GenerationForm({ children }: GenerationFormProps) {
+  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [trends, setTrends] = useState<Trend[]>([])
@@ -389,23 +391,34 @@ export function GenerationForm({ children }: GenerationFormProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="!max-w-[95vw] !w-[95vw] sm:!max-w-[95vw]">
-        <DialogHeader>
-          <DialogTitle>Generate New Blog Post</DialogTitle>
-          <DialogDescription>
+      <DialogContent className={cn(
+        "w-full max-w-7xl p-0",
+        isMobile 
+          ? "max-w-full h-[100dvh] w-screen rounded-none m-0 border-0" 
+          : "max-h-[90vh] h-full"
+      )}>
+        <DialogHeader className={cn("p-4 sm:p-6 border-b", isMobile && "sticky top-0 bg-background z-20 shrink-0")}>
+          <DialogTitle className="text-lg sm:text-xl">Generate New Blog Post</DialogTitle>
+          <DialogDescription className="text-sm">
             Generate a blog post from trending topics or provide your own custom topic. Configure the parameters below.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className={cn(
-            "flex gap-8",
-            form.watch("generationType") === "trending_select" ? "" : "justify-center"
+            "flex",
+            isMobile 
+              ? "flex-col h-[calc(100dvh-120px)]" 
+              : form.watch("generationType") === "trending_select" 
+                ? "gap-6 h-[calc(90vh-120px)]" 
+                : "flex-col h-[calc(90vh-120px)]"
           )}>
-            {/* Left Column - Form Controls */}
+            {/* Form Controls */}
             <div className={cn(
-              "space-y-6 overflow-y-auto pr-2",
-              form.watch("generationType") === "trending_select" ? "w-1/3" : "w-full max-w-2xl"
+              "space-y-4 sm:space-y-6 overflow-y-auto p-4 sm:p-6",
+              isMobile && "flex-1 min-h-0",
+              !isMobile && form.watch("generationType") === "trending_select" && "w-1/3 border-r",
+              !isMobile && form.watch("generationType") !== "trending_select" && "max-w-2xl mx-auto flex-1"
             )}>
               {/* Generation Type Selection */}
               <FormField
@@ -625,34 +638,14 @@ export function GenerationForm({ children }: GenerationFormProps) {
                 </p>
               </div>
 
-              {/* Submit Button */}
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isGenerating}>
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Starting Generation...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Generate Post
-                    </>
-                  )}
-                </Button>
-              </div>
             </div>
 
-            {/* Right Column - Trend Selector */}
+            {/* Trend Selector Section */}
             {form.watch("generationType") === "trending_select" && (
-              <div className="w-2/3 space-y-4 overflow-y-auto pl-2">
+              <div className={cn(
+                "space-y-4 overflow-y-auto",
+                isMobile ? "p-4 sm:p-6 border-t flex-1 min-h-0" : "w-2/3 p-6 flex-1"
+              )}>
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-blue-500" />
                   <h3 className="text-lg font-semibold">Choose from Trending Topics</h3>
@@ -754,6 +747,40 @@ export function GenerationForm({ children }: GenerationFormProps) {
                 )}
               </div>
             )}
+
+            {/* Fixed Footer with Submit Buttons */}
+            <div className={cn(
+              "border-t bg-background p-4 sm:p-6 flex gap-2 justify-end shrink-0",
+              isMobile && "sticky bottom-0 z-10"
+            )}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                className={cn(isMobile && "flex-1 min-h-[44px]")}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isGenerating}
+                className={cn(isMobile && "flex-1 min-h-[44px]")}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span className={cn(isMobile && "hidden sm:inline")}>Starting Generation...</span>
+                    {isMobile && <span className="sm:hidden">Starting...</span>}
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    <span className={cn(isMobile && "hidden sm:inline")}>Generate Post</span>
+                    {isMobile && <span className="sm:hidden">Generate</span>}
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
         </Form>
       </DialogContent>

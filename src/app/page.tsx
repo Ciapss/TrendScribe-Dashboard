@@ -13,12 +13,12 @@ export default function DashboardPage() {
 
   return (
     <RouteGuard requireAuth={true}>
-      <div className="flex flex-col gap-6">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">
+      <div className="flex flex-col gap-4 sm:gap-6 min-w-0 w-full overflow-hidden">
+        <div className="space-y-1 sm:space-y-2">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
             Welcome back, {user?.username || 'User'}!
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Welcome to your TrendScribe AI dashboard. Here&apos;s what&apos;s happening with your content.
           </p>
         </div>
@@ -26,15 +26,15 @@ export default function DashboardPage() {
         <OverviewCards />
         
         {isAdmin && (
-          <div>
-            <h3 className="text-lg font-semibold tracking-tight mb-4">API Usage & Costs</h3>
+          <div className="space-y-3 sm:space-y-4">
+            <h3 className="text-base sm:text-lg font-semibold tracking-tight">API Usage & Costs</h3>
             <CostOverview />
           </div>
         )}
         
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-          <ActivityChart className="col-span-4" />
-          <RecentPosts className="col-span-3" />
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-7">
+          <ActivityChart className="col-span-1 lg:col-span-4" />
+          <RecentPosts className="col-span-1 lg:col-span-3" />
         </div>
       </div>
     </RouteGuard>

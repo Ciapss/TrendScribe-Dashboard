@@ -172,20 +172,21 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <div className="p-4 space-y-3">
+        <div className="p-3 sm:p-4 space-y-3">
           <GenerationForm>
-            <Button className="w-full" size="sm">
+            <Button className="w-full min-h-[44px]" size="sm">
               <Plus className="mr-2 h-4 w-4" />
-              Generate Post
+              <span className="hidden sm:inline">Generate Post</span>
+              <span className="sm:hidden">Generate</span>
             </Button>
           </GenerationForm>
           
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start h-auto p-2">
-                  <div className="flex items-center gap-3 w-full">
-                    <Avatar className="h-8 w-8">
+                <Button variant="ghost" className="w-full justify-start h-auto p-2 min-h-[44px]">
+                  <div className="flex items-center gap-2 sm:gap-3 w-full">
+                    <Avatar className="h-8 w-8 flex-shrink-0">
                       <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                         {user.username.charAt(0).toUpperCase()}
                       </AvatarFallback>

@@ -7,11 +7,17 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme="light"
       className="toaster group"
+      toastOptions={{
+        style: {
+          zIndex: 9999,
+        },
+      }}
       style={
         {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
+          zIndex: 9999,
         } as React.CSSProperties
       }
       {...props}

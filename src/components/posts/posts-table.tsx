@@ -25,6 +25,7 @@ import {
 import { apiClient } from "@/lib/api-client"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/components/auth/auth-provider"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 interface PostsTableProps {
   searchQuery?: string
@@ -32,9 +33,109 @@ interface PostsTableProps {
   sortBy?: string
 }
 
+function MobilePostCard({ post, isAdmin, onCopyTitle, onExport }: {
+  post: BlogPost
+  isAdmin: boolean
+  onCopyTitle: (title: string) => void
+  onExport: (post: BlogPost) => void
+}) {
+  const getQualityColor = (score: number) => {
+    if (score >= 85) return "bg-green-100 text-green-800 border-green-200"
+    if (score >= 75) return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    return "bg-red-100 text-red-800 border-red-200"
+  }
+
+  const getSeoColor = (score: number) => {
+    if (score >= 90) return "bg-green-100 text-green-800 border-green-200"
+    if (score >= 80) return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    return "bg-red-100 text-red-800 border-red-200"
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-3">
+        {/* Title and Industry */}
+        <div className="space-y-2">
+          <h3 className="font-medium text-sm leading-tight line-clamp-2">{post.title}</h3>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">
+              {INDUSTRY_LABELS[post.industry] || post.industry}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              {post.metadata.readingTime} min read
+            </span>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <div className="text-muted-foreground">Created</div>
+            <div>{post.createdAt.toLocaleDateString()}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-muted-foreground">Words</div>
+            <div className="font-medium">{post.metadata.wordCount.toLocaleString()}</div>
+          </div>
+        </div>
+
+        {/* Quality & SEO Scores */}
+        <div className="flex items-center gap-2">
+          <Badge 
+            variant="outline" 
+            className={`${getQualityColor(post.metadata.qualityScore)} text-xs`}
+          >
+            Q: {post.metadata.qualityScore.toFixed(0)}/100
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className={`${getSeoColor(post.metadata.seoScore)} text-xs`}
+          >
+            SEO: {post.metadata.seoScore.toFixed(0)}%
+          </Badge>
+          {isAdmin && post.generationCost !== undefined && (
+            <Badge variant="outline" className="text-xs">
+              ${post.generationCost.toFixed(2)}
+            </Badge>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-between pt-2 border-t">
+          <Button variant="ghost" size="sm" asChild className="min-h-[44px] flex-1 mr-2">
+            <Link href={`/posts/${post.id}`} className="flex items-center justify-center">
+              <Eye className="h-4 w-4 mr-2" />
+              View
+            </Link>
+          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="min-h-[44px] min-w-[44px]">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onCopyTitle(post.title)}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy Title
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onExport(post)}>
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export function PostsTable({ searchQuery, industryFilter, sortBy }: PostsTableProps) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const isMobile = useIsMobile()
   const [posts, setPosts] = useState<BlogPost[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +156,7 @@ export function PostsTable({ searchQuery, industryFilter, sortBy }: PostsTablePr
         limit: pagination.limit,
         search: searchQuery,
         filter: industryFilter,
-        sort: sortBy
+        sort: sortBy || "date-desc"
       })
       
       // Convert date strings to Date objects
@@ -64,7 +165,33 @@ export function PostsTable({ searchQuery, industryFilter, sortBy }: PostsTablePr
         createdAt: new Date(post.createdAt)
       }))
       
-      setPosts(postsWithDates)
+      // Client-side sorting as fallback to ensure correct order
+      const sortedPosts = [...postsWithDates].sort((a, b) => {
+        const sortOrder = sortBy || "date-desc"
+        
+        if (sortOrder.startsWith("date")) {
+          const dateA = new Date(a.createdAt).getTime()
+          const dateB = new Date(b.createdAt).getTime()
+          return sortOrder.includes("desc") ? dateB - dateA : dateA - dateB
+        }
+        
+        if (sortOrder.startsWith("quality")) {
+          const qualityA = a.metadata.qualityScore
+          const qualityB = b.metadata.qualityScore
+          return sortOrder.includes("desc") ? qualityB - qualityA : qualityA - qualityB
+        }
+        
+        if (sortOrder.startsWith("title")) {
+          const titleA = a.title.toLowerCase()
+          const titleB = b.title.toLowerCase()
+          return sortOrder.includes("desc") ? titleB.localeCompare(titleA) : titleA.localeCompare(titleB)
+        }
+        
+        // Default to newest first
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      })
+      
+      setPosts(sortedPosts)
       setPagination(response.pagination)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch posts')
@@ -240,138 +367,155 @@ export function PostsTable({ searchQuery, industryFilter, sortBy }: PostsTablePr
             </span>
           )}
         </CardTitle>
-        <Button variant="outline" size="sm" onClick={handleRetry}>
+        <Button variant="outline" size="sm" onClick={handleRetry} className="min-h-[44px] sm:min-h-auto">
           <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Words</TableHead>
-                <TableHead>Quality</TableHead>
-                <TableHead>SEO</TableHead>
-                <TableHead>Cost</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {posts.map((post) => (
-                <TableRow key={post.id}>
-                  <TableCell className="max-w-[300px]">
-                    <div className="truncate font-medium">
-                      {post.title}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {post.metadata.readingTime} min read
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {INDUSTRY_LABELS[post.industry] || post.industry}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {post.createdAt.toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {post.createdAt.toLocaleTimeString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm font-medium">
-                      {post.metadata.wordCount.toLocaleString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant="outline" 
-                      className={getQualityColor(post.metadata.qualityScore)}
-                    >
-                      {post.metadata.qualityScore.toFixed(0)}/100
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant="outline" 
-                      className={getSeoColor(post.metadata.seoScore)}
-                    >
-                      {post.metadata.seoScore.toFixed(0)}%
-                    </Badge>
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell>
-                      <div className="text-sm font-medium">
-                        {post.generationCost !== undefined 
-                          ? `$${post.generationCost.toFixed(2)}` 
-                          : "—"}
+        {isMobile ? (
+          /* Mobile Card Layout */
+          <div className="space-y-3">
+            {posts.map((post) => (
+              <MobilePostCard
+                key={post.id}
+                post={post}
+                isAdmin={isAdmin}
+                onCopyTitle={handleCopyTitle}
+                onExport={handleExport}
+              />
+            ))}
+          </div>
+        ) : (
+          /* Desktop Table Layout */
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Industry</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Words</TableHead>
+                  <TableHead>Quality</TableHead>
+                  <TableHead>SEO</TableHead>
+                  {isAdmin && <TableHead>Cost</TableHead>}
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {posts.map((post) => (
+                  <TableRow key={post.id}>
+                    <TableCell className="max-w-[300px]">
+                      <div className="truncate font-medium">
+                        {post.title}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {post.metadata.readingTime} min read
                       </div>
                     </TableCell>
-                  )}
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/posts/${post.id}`}>
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleCopyTitle(post.title)}>
-                            <Copy className="mr-2 h-4 w-4" />
-                            Copy Title
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleExport(post)}>
-                            <Download className="mr-2 h-4 w-4" />
-                            Export
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {INDUSTRY_LABELS[post.industry] || post.industry}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {post.createdAt.toLocaleDateString()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {post.createdAt.toLocaleTimeString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium">
+                        {post.metadata.wordCount.toLocaleString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant="outline" 
+                        className={getQualityColor(post.metadata.qualityScore)}
+                      >
+                        {post.metadata.qualityScore.toFixed(0)}/100
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant="outline" 
+                        className={getSeoColor(post.metadata.seoScore)}
+                      >
+                        {post.metadata.seoScore.toFixed(0)}%
+                      </Badge>
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell>
+                        <div className="text-sm font-medium">
+                          {post.generationCost !== undefined 
+                            ? `$${post.generationCost.toFixed(2)}` 
+                            : "—"}
+                        </div>
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/posts/${post.id}`}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleCopyTitle(post.title)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy Title
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport(post)}>
+                              <Download className="mr-2 h-4 w-4" />
+                              Export
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
         
         {/* Pagination */}
         {pagination.pages > 1 && (
-          <div className="flex items-center justify-between mt-4">
-            <div className="text-sm text-muted-foreground">
+          <div className="mt-4 space-y-3 sm:space-y-0">
+            <div className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
               Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} posts
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center justify-center sm:justify-end space-x-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handlePageChange(pagination.page - 1)}
                 disabled={pagination.page === 1}
+                className="min-h-[44px] sm:min-h-auto"
               >
                 Previous
               </Button>
               
-              {/* Page numbers */}
+              {/* Page numbers - simplified for mobile */}
               <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
+                {Array.from({ length: Math.min(isMobile ? 3 : 5, pagination.pages) }, (_, i) => {
                   let pageNum;
-                  if (pagination.pages <= 5) {
+                  if (pagination.pages <= (isMobile ? 3 : 5)) {
                     pageNum = i + 1;
                   } else {
-                    const start = Math.max(1, pagination.page - 2);
-                    const end = Math.min(pagination.pages, start + 4);
+                    const start = Math.max(1, pagination.page - (isMobile ? 1 : 2));
+                    const end = Math.min(pagination.pages, start + (isMobile ? 2 : 4));
                     pageNum = start + i;
                     if (pageNum > end) return null;
                   }
@@ -382,7 +526,7 @@ export function PostsTable({ searchQuery, industryFilter, sortBy }: PostsTablePr
                       variant={pagination.page === pageNum ? "default" : "outline"}
                       size="sm"
                       onClick={() => handlePageChange(pageNum)}
-                      className="w-8 h-8 p-0"
+                      className="w-8 h-8 p-0 sm:w-8 sm:h-8 min-h-[44px] min-w-[44px] sm:min-h-auto sm:min-w-auto"
                     >
                       {pageNum}
                     </Button>
@@ -395,6 +539,7 @@ export function PostsTable({ searchQuery, industryFilter, sortBy }: PostsTablePr
                 size="sm"
                 onClick={() => handlePageChange(pagination.page + 1)}
                 disabled={pagination.page === pagination.pages}
+                className="min-h-[44px] sm:min-h-auto"
               >
                 Next
               </Button>

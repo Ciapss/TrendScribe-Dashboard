@@ -28,7 +28,13 @@ export function RecentPosts({ className }: RecentPostsProps) {
           limit: 5, 
           sort: 'date-desc' 
         })
-        setPosts(response.posts)
+        
+        // Client-side sorting to ensure newest posts are first
+        const sortedPosts = [...response.posts].sort((a, b) => {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        })
+        
+        setPosts(sortedPosts)
       } catch (error) {
         console.error('Failed to fetch recent posts:', error)
         setError('Failed to load recent posts')
@@ -47,7 +53,7 @@ export function RecentPosts({ className }: RecentPostsProps) {
   }
 
   return (
-    <Card className={className}>
+    <Card className={`${className} min-w-0`}>
       <CardHeader>
         <CardTitle>Recent Posts</CardTitle>
         <CardDescription>

@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import { RSSFeedManager } from "@/components/sources/rss-feed-manager";
 import { SourceSelector } from "@/components/sources/source-selector";
 import { INDUSTRIES, INDUSTRY_LABELS } from "@/lib/constants";
@@ -73,6 +75,7 @@ const INDUSTRY_HASHTAGS: Record<string, string[]> = {
 
 export default function SourcesSettingsPage() {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("overview");
   
   // State for adding subreddits
@@ -510,9 +513,17 @@ export default function SourcesSettingsPage() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className={cn(
+      "container mx-auto",
+      isMobile 
+        ? "h-screen max-h-screen flex flex-col py-2 px-4 gap-3 overflow-hidden" 
+        : "py-6 space-y-6"
+    )}>
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className={cn(
+        "flex items-center gap-4",
+        isMobile && "flex-shrink-0"
+      )}>
         <Button
           variant="outline"
           size="sm"
@@ -523,50 +534,92 @@ export default function SourcesSettingsPage() {
         </Button>
         
         <div>
-          <h1 className="text-2xl font-bold">Source Configuration</h1>
-          <p className="text-muted-foreground">
+          <h1 className={cn(
+            "font-bold",
+            isMobile ? "text-lg" : "text-2xl"
+          )}>Source Configuration</h1>
+          <p className={cn(
+            "text-muted-foreground",
+            isMobile ? "text-xs" : "text-sm"
+          )}>
             Manage your trend discovery sources and RSS feeds
           </p>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview" className="flex items-center gap-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className={cn(
+        isMobile 
+          ? "flex-1 min-h-0 flex flex-col gap-3 overflow-hidden" 
+          : "space-y-6"
+      )}>
+        <TabsList className={cn(
+          "w-full flex-shrink-0",
+          isMobile 
+            ? "h-auto p-1 grid grid-cols-3 gap-1 grid-rows-2" 
+            : "grid grid-cols-5"
+        )}>
+          <TabsTrigger value="overview" className={cn(
+            "flex items-center gap-1",
+            isMobile ? "px-2 py-3 text-xs col-span-1" : "gap-2"
+          )}>
             <BarChart3 className="h-4 w-4" />
-            Overview
+            {isMobile ? "Overview" : "Overview"}
           </TabsTrigger>
-          <TabsTrigger value="sources" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Source Settings
-          </TabsTrigger>
-          <TabsTrigger value="rss" className="flex items-center gap-2">
-            <Rss className="h-4 w-4" />
-            RSS Feeds
-          </TabsTrigger>
-          <TabsTrigger value="subreddits" className="flex items-center gap-2">
+          <TabsTrigger value="subreddits" className={cn(
+            "flex items-center gap-1",
+            isMobile ? "px-2 py-3 text-xs col-span-1" : "gap-2"
+          )}>
             <MessageCircle className="h-4 w-4" />
             Subreddits
           </TabsTrigger>
-          <TabsTrigger value="hashtags" className="flex items-center gap-2">
+          <TabsTrigger value="rss" className={cn(
+            "flex items-center gap-1",
+            isMobile ? "px-2 py-3 text-xs col-span-1" : "gap-2"
+          )}>
+            <Rss className="h-4 w-4" />
+            {isMobile ? "RSS" : "RSS Feeds"}
+          </TabsTrigger>
+          <TabsTrigger value="hashtags" className={cn(
+            "flex items-center gap-1",
+            isMobile ? "px-2 py-3 text-xs col-span-1" : "gap-2"
+          )}>
             <Hash className="h-4 w-4" />
-            Hashtags
+            {isMobile ? "Hashtags" : "Hashtags"}
+          </TabsTrigger>
+          <TabsTrigger value="sources" className={cn(
+            "flex items-center gap-1",
+            isMobile ? "px-2 py-3 text-xs col-span-1" : "gap-2"
+          )}>
+            <Settings className="h-4 w-4" />
+            {isMobile ? "Settings" : "Source Settings"}
           </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TabsContent value="overview" className={cn(
+          isMobile 
+            ? "flex-1 min-h-0 overflow-auto pb-4" 
+            : "space-y-6"
+        )}>
+          <div className={cn(
+            "grid gap-6",
+            isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"
+          )}>
             {/* Quick Stats Card */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className={cn(isMobile && "pb-3")}>
+                <CardTitle className={cn(
+                  "flex items-center gap-2",
+                  isMobile ? "text-base" : "text-lg"
+                )}>
                   <BarChart3 className="h-5 w-5" />
                   Source Summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className={cn(
+                isMobile ? "space-y-2 pb-3" : "space-y-4"
+              )}>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Active Sources</span>
@@ -621,49 +674,66 @@ export default function SourcesSettingsPage() {
               <CardHeader>
                 <CardTitle>Quick Actions</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className={cn(
+                isMobile ? "grid grid-cols-2 gap-2" : "space-y-3"
+              )}>
                 <Button 
                   variant="outline" 
-                  className="w-full justify-start"
+                  className={cn(
+                    "justify-start",
+                    isMobile ? "text-xs px-2 py-2 h-auto" : "w-full"
+                  )}
                   onClick={() => setActiveTab("rss")}
                 >
-                  <Rss className="h-4 w-4 mr-2" />
-                  Add RSS Feed
+                  <Rss className="h-4 w-4 mr-1" />
+                  {isMobile ? "RSS" : "Add RSS Feed"}
                 </Button>
                 
                 <Button 
                   variant="outline" 
-                  className="w-full justify-start"
+                  className={cn(
+                    "justify-start",
+                    isMobile ? "text-xs px-2 py-2 h-auto" : "w-full"
+                  )}
                   onClick={() => setActiveTab("subreddits")}
                 >
-                  <MessageCircle className="h-4 w-4 mr-2" />
-                  Manage Subreddits
+                  <MessageCircle className="h-4 w-4 mr-1" />
+                  {isMobile ? "Sources" : "Manage Subreddits"}
                 </Button>
                 
                 <Button 
                   variant="outline" 
-                  className="w-full justify-start"
+                  className={cn(
+                    "justify-start",
+                    isMobile ? "text-xs px-2 py-2 h-auto" : "w-full"
+                  )}
                   onClick={() => setActiveTab("hashtags")}
                 >
-                  <Hash className="h-4 w-4 mr-2" />
-                  Manage Hashtags
+                  <Hash className="h-4 w-4 mr-1" />
+                  {isMobile ? "Hashtags" : "Manage Hashtags"}
                 </Button>
                 
                 <Button 
                   variant="outline" 
-                  className="w-full justify-start"
+                  className={cn(
+                    "justify-start",
+                    isMobile ? "text-xs px-2 py-2 h-auto" : "w-full"
+                  )}
                   onClick={() => setActiveTab("sources")}
                 >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Configure Sources
+                  <Settings className="h-4 w-4 mr-1" />
+                  {isMobile ? "Config" : "Configure Sources"}
                 </Button>
                 
                 <Button 
                   variant="outline" 
-                  className="w-full justify-start"
+                  className={cn(
+                    "justify-start col-span-2",
+                    isMobile ? "text-xs px-2 py-2 h-auto" : "w-full"
+                  )}
                 >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Test All Sources
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  {isMobile ? "Test Sources" : "Test All Sources"}
                 </Button>
               </CardContent>
             </Card>
@@ -718,7 +788,12 @@ export default function SourcesSettingsPage() {
         </TabsContent>
 
         {/* Source Settings Tab */}
-        <TabsContent value="sources" className="space-y-6">
+        <TabsContent value="sources" className={cn(
+          isMobile 
+            ? "flex-1 min-h-0 overflow-auto pb-4" 
+            : "space-y-6"
+        )}>
+          <div className={cn(isMobile && "space-y-4")}>
           <Card>
             <CardHeader>
               <CardTitle>Source Configuration</CardTitle>
@@ -842,15 +917,25 @@ export default function SourcesSettingsPage() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         {/* RSS Feeds Tab */}
-        <TabsContent value="rss" className="space-y-6">
+        <TabsContent value="rss" className={cn(
+          isMobile 
+            ? "flex-1 min-h-0 overflow-auto pb-4" 
+            : "space-y-6"
+        )}>
           <RSSFeedManager />
         </TabsContent>
 
         {/* Subreddits Tab */}
-        <TabsContent value="subreddits" className="space-y-6">
+        <TabsContent value="subreddits" className={cn(
+          isMobile 
+            ? "flex-1 min-h-0 overflow-auto pb-4" 
+            : "space-y-6"
+        )}>
+          <div className={cn(isMobile && "space-y-4")}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -872,7 +957,7 @@ export default function SourcesSettingsPage() {
                         ? getCombinedSubreddits(industry) 
                         : getCombinedSubreddits(industry)?.slice(0, 5)
                       )?.map((subreddit) => (
-                        <div key={subreddit} className="flex items-center justify-between p-2 border rounded">
+                        <div key={`${industry}-${subreddit}`} className="flex items-center justify-between p-2 border rounded">
                           <div className="flex items-center gap-2">
                             <input 
                               type="checkbox" 
@@ -916,7 +1001,7 @@ export default function SourcesSettingsPage() {
                             ? getCombinedSubreddits(industry) 
                             : getCombinedSubreddits(industry)?.slice(0, 5)
                           )?.map((subreddit) => (
-                            <div key={subreddit} className="flex items-center justify-between p-2 border rounded">
+                            <div key={`${industry}-${subreddit}`} className="flex items-center justify-between p-2 border rounded">
                               <div className="flex items-center gap-2">
                                 <input 
                                   type="checkbox" 
@@ -1004,7 +1089,7 @@ export default function SourcesSettingsPage() {
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {getCombinedSubreddits(selectedIndustry)?.map((subreddit) => (
-                      <Badge key={subreddit} variant="secondary" className="text-xs">
+                      <Badge key={`${selectedIndustry}-${subreddit}`} variant="secondary" className="text-xs">
                         r/{subreddit}
                       </Badge>
                     ))}
@@ -1086,10 +1171,16 @@ export default function SourcesSettingsPage() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         {/* Hashtags Tab */}
-        <TabsContent value="hashtags" className="space-y-6">
+        <TabsContent value="hashtags" className={cn(
+          isMobile 
+            ? "flex-1 min-h-0 overflow-auto pb-4" 
+            : "space-y-6"
+        )}>
+          <div className={cn(isMobile && "space-y-4")}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1196,6 +1287,7 @@ export default function SourcesSettingsPage() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

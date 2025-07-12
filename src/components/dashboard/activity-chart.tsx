@@ -94,7 +94,7 @@ export function ActivityChart({ className }: ActivityChartProps) {
   }
 
   return (
-    <Card className={className}>
+    <Card className={`${className} min-w-0`}>
       <CardHeader>
         <CardTitle>Activity Overview</CardTitle>
         <CardDescription>

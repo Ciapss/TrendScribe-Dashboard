@@ -10,6 +10,8 @@ import { apiClient } from "@/lib/api-client"
 import { CustomIndustryCreate } from "@/types"
 import { toast } from "sonner"
 import { X, Plus } from "lucide-react"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils"
 
 interface IndustryCreateFormProps {
   onSuccess: () => void
@@ -17,6 +19,7 @@ interface IndustryCreateFormProps {
 }
 
 export function IndustryCreateForm({ onSuccess, onCancel }: IndustryCreateFormProps) {
+  const isMobile = useIsMobile()
   const [formData, setFormData] = useState<CustomIndustryCreate>({
     industry_id: "",
     name: "",
@@ -175,7 +178,7 @@ export function IndustryCreateForm({ onSuccess, onCancel }: IndustryCreateFormPr
               placeholder="Add keyword..."
               onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addKeyword())}
             />
-            <Button type="button" onClick={addKeyword} size="sm">
+            <Button type="button" onClick={addKeyword} size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-auto sm:min-w-auto">
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -207,7 +210,7 @@ export function IndustryCreateForm({ onSuccess, onCancel }: IndustryCreateFormPr
               placeholder="Add category..."
               onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addCategory())}
             />
-            <Button type="button" onClick={addCategory} size="sm">
+            <Button type="button" onClick={addCategory} size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-auto sm:min-w-auto">
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -239,7 +242,7 @@ export function IndustryCreateForm({ onSuccess, onCancel }: IndustryCreateFormPr
               placeholder="Add subreddit (without r/)..."
               onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSubreddit())}
             />
-            <Button type="button" onClick={addSubreddit} size="sm">
+            <Button type="button" onClick={addSubreddit} size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-auto sm:min-w-auto">
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -263,11 +266,20 @@ export function IndustryCreateForm({ onSuccess, onCancel }: IndustryCreateFormPr
         </div>
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
+      <div className={cn("flex gap-2", isMobile ? "flex-col" : "justify-end")}>
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel}
+          className={cn(isMobile && "min-h-[44px]")}
+        >
           Cancel
         </Button>
-        <Button type="submit" disabled={loading}>
+        <Button 
+          type="submit" 
+          disabled={loading}
+          className={cn(isMobile && "min-h-[44px]")}
+        >
           {loading ? "Creating..." : "Create Industry"}
         </Button>
       </div>

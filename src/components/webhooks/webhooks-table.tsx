@@ -25,12 +25,176 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
+import { useIsMobile } from "@/hooks/use-mobile"
+
+function MobileWebhookCard({ webhook, testingWebhooks, togglingWebhooks, onToggleEnabled, onTestWebhook, onDeleteWebhook }: {
+  webhook: Webhook
+  testingWebhooks: Set<string>
+  togglingWebhooks: Set<string>
+  onToggleEnabled: (webhookId: string, enabled: boolean) => void
+  onTestWebhook: (webhookId: string) => void
+  onDeleteWebhook: (webhookId: string) => void
+}) {
+  const [expandedIndustries, setExpandedIndustries] = useState(false)
+  const getStatusColor = (status: "success" | "failed") => {
+    return status === "success" 
+      ? "text-green-600 bg-green-100" 
+      : "text-red-600 bg-red-100"
+  }
+
+  const getScheduleText = (schedule: Webhook['schedule']) => {
+    switch (schedule.frequency) {
+      case 'daily':
+        return `Daily at ${schedule.time}`
+      case 'weekly':
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        return `Weekly on ${days[schedule.dayOfWeek || 0]} at ${schedule.time}`
+      case 'monthly':
+        return `Monthly on day ${schedule.dayOfMonth} at ${schedule.time}`
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-3">
+        {/* Name and URL */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-sm">{webhook.name}</h3>
+            <Switch
+              checked={webhook.enabled}
+              disabled={togglingWebhooks.has(webhook.id)}
+              onCheckedChange={(enabled) => onToggleEnabled(webhook.id, enabled)}
+            />
+          </div>
+          <div className="text-xs text-muted-foreground truncate">
+            {webhook.url}
+          </div>
+          <div className="flex items-center gap-1">
+            <Badge variant="outline" className="text-xs">
+              {webhook.method}
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {webhook.auth.type}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Schedule and Industries */}
+        <div className="space-y-2 text-xs">
+          <div>
+            <span className="text-muted-foreground">Schedule: </span>
+            <span>{getScheduleText(webhook.schedule)}</span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {(expandedIndustries ? webhook.industries : webhook.industries.slice(0, 3)).map((industry) => (
+              <Badge key={industry} variant="secondary" className="text-xs h-6">
+                {INDUSTRY_LABELS[industry]}
+              </Badge>
+            ))}
+            {webhook.industries.length > 3 && (
+              <Badge 
+                variant="secondary" 
+                className="text-xs h-6 cursor-pointer hover:bg-muted transition-colors"
+                onClick={() => setExpandedIndustries(!expandedIndustries)}
+              >
+                {expandedIndustries 
+                  ? "Show less" 
+                  : `+${webhook.industries.length - 3} more`
+                }
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Status and Last Delivery */}
+        <div className="flex items-center justify-between text-xs">
+          <div>
+            {webhook.lastDelivery ? (
+              <Badge 
+                variant="outline" 
+                className={`${getStatusColor(webhook.lastDelivery.status)} border-current`}
+              >
+                {webhook.lastDelivery.status === "success" ? (
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                ) : (
+                  <XCircle className="w-3 h-3 mr-1" />
+                )}
+                {webhook.lastDelivery.status}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground">
+                No deliveries
+              </Badge>
+            )}
+          </div>
+          <div className="text-muted-foreground">
+            {webhook.lastDelivery 
+              ? webhook.lastDelivery.timestamp.toLocaleDateString()
+              : "Never"
+            }
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-2 border-t">
+          <Button variant="ghost" size="sm" asChild className="min-h-[44px] flex-1">
+            <Link href={`/webhooks/${webhook.id}/logs`} className="flex items-center justify-center">
+              <Eye className="h-4 w-4 mr-2" />
+              Logs
+            </Link>
+          </Button>
+          
+          <Button 
+            variant="ghost" 
+            size="sm"
+            disabled={testingWebhooks.has(webhook.id)}
+            onClick={() => onTestWebhook(webhook.id)}
+            className="min-h-[44px] flex-1"
+          >
+            {testingWebhooks.has(webhook.id) ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <TestTube className="h-4 w-4 mr-2" />
+            )}
+            Test
+          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="min-h-[44px] min-w-[44px]">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href={`/webhooks/${webhook.id}`}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="text-red-600"
+                onClick={() => onDeleteWebhook(webhook.id)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export function WebhooksTable() {
+  const isMobile = useIsMobile()
   const [webhooks, setWebhooks] = useState<Webhook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [testingWebhooks, setTestingWebhooks] = useState<Set<string>>(new Set())
   const [togglingWebhooks, setTogglingWebhooks] = useState<Set<string>>(new Set())
+  const [expandedIndustries, setExpandedIndustries] = useState<Set<string>>(new Set())
 
   const fetchWebhooks = async () => {
     try {
@@ -53,6 +217,18 @@ export function WebhooksTable() {
   useEffect(() => {
     fetchWebhooks()
   }, [])
+
+  const toggleExpandedIndustries = (webhookId: string) => {
+    setExpandedIndustries(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(webhookId)) {
+        newSet.delete(webhookId)
+      } else {
+        newSet.add(webhookId)
+      }
+      return newSet
+    })
+  }
 
   const handleToggleEnabled = async (webhookId: string, enabled: boolean) => {
     if (togglingWebhooks.has(webhookId)) return
@@ -222,149 +398,174 @@ export function WebhooksTable() {
         <CardTitle>All Webhooks ({webhooks.length})</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name & URL</TableHead>
-                <TableHead>Schedule</TableHead>
-                <TableHead>Industries</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Delivery</TableHead>
-                <TableHead>Enabled</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {webhooks.map((webhook) => (
-                <TableRow key={webhook.id}>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="font-medium">{webhook.name}</div>
-                      <div className="text-sm text-muted-foreground truncate max-w-[200px]">
-                        {webhook.url}
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Badge variant="outline" className="text-xs">
-                          {webhook.method}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {webhook.auth.type}
-                        </Badge>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {getScheduleText(webhook.schedule)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      {webhook.industries.slice(0, 2).map((industry) => (
-                        <Badge key={industry} variant="secondary" className="text-xs block w-fit">
-                          {INDUSTRY_LABELS[industry]}
-                        </Badge>
-                      ))}
-                      {webhook.industries.length > 2 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{webhook.industries.length - 2} more
-                        </Badge>
-                      )}
-                      {webhook.industryRotation && (
-                        <Badge variant="outline" className="text-xs">
-                          Rotating
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {webhook.lastDelivery ? (
-                      <Badge 
-                        variant="outline" 
-                        className={`${getStatusColor(webhook.lastDelivery.status)} border-current`}
-                      >
-                        {webhook.lastDelivery.status === "success" ? (
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                        ) : (
-                          <XCircle className="w-3 h-3 mr-1" />
-                        )}
-                        {webhook.lastDelivery.status}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        No deliveries
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {webhook.lastDelivery ? (
-                      <div className="text-sm">
-                        <div>{webhook.lastDelivery.timestamp.toLocaleDateString()}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {webhook.lastDelivery.timestamp.toLocaleTimeString()}
+        {isMobile ? (
+          /* Mobile Card Layout */
+          <div className="space-y-3">
+            {webhooks.map((webhook) => (
+              <MobileWebhookCard
+                key={webhook.id}
+                webhook={webhook}
+                testingWebhooks={testingWebhooks}
+                togglingWebhooks={togglingWebhooks}
+                onToggleEnabled={handleToggleEnabled}
+                onTestWebhook={handleTestWebhook}
+                onDeleteWebhook={handleDeleteWebhook}
+              />
+            ))}
+          </div>
+        ) : (
+          /* Desktop Table Layout */
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name & URL</TableHead>
+                  <TableHead>Schedule</TableHead>
+                  <TableHead>Industries</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Delivery</TableHead>
+                  <TableHead>Enabled</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {webhooks.map((webhook) => (
+                  <TableRow key={webhook.id}>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="font-medium">{webhook.name}</div>
+                        <div className="text-sm text-muted-foreground truncate max-w-[200px]">
+                          {webhook.url}
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Badge variant="outline" className="text-xs">
+                            {webhook.method}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {webhook.auth.type}
+                          </Badge>
                         </div>
                       </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Never</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={webhook.enabled}
-                      disabled={togglingWebhooks.has(webhook.id)}
-                      onCheckedChange={(enabled) => handleToggleEnabled(webhook.id, enabled)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/webhooks/${webhook.id}/logs`}>
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        disabled={testingWebhooks.has(webhook.id)}
-                        onClick={() => handleTestWebhook(webhook.id)}
-                      >
-                        {testingWebhooks.has(webhook.id) ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <TestTube className="h-4 w-4" />
-                        )}
-                      </Button>
-                      
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/webhooks/${webhook.id}`}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="text-red-600"
-                            onClick={() => handleDeleteWebhook(webhook.id)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {getScheduleText(webhook.schedule)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {(expandedIndustries.has(webhook.id) ? webhook.industries : webhook.industries.slice(0, 2)).map((industry) => (
+                          <Badge key={industry} variant="secondary" className="text-xs h-6 block w-fit">
+                            {INDUSTRY_LABELS[industry]}
+                          </Badge>
+                        ))}
+                        {webhook.industries.length > 2 && (
+                          <Badge 
+                            variant="secondary" 
+                            className="text-xs h-6 cursor-pointer hover:bg-muted transition-colors w-fit"
+                            onClick={() => toggleExpandedIndustries(webhook.id)}
                           >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                            {expandedIndustries.has(webhook.id) 
+                              ? "Show less" 
+                              : `+${webhook.industries.length - 2} more`
+                            }
+                          </Badge>
+                        )}
+                        {webhook.industryRotation && (
+                          <Badge variant="outline" className="text-xs h-6">
+                            Rotating
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {webhook.lastDelivery ? (
+                        <Badge 
+                          variant="outline" 
+                          className={`${getStatusColor(webhook.lastDelivery.status)} border-current`}
+                        >
+                          {webhook.lastDelivery.status === "success" ? (
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                          ) : (
+                            <XCircle className="w-3 h-3 mr-1" />
+                          )}
+                          {webhook.lastDelivery.status}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          No deliveries
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {webhook.lastDelivery ? (
+                        <div className="text-sm">
+                          <div>{webhook.lastDelivery.timestamp.toLocaleDateString()}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {webhook.lastDelivery.timestamp.toLocaleTimeString()}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Never</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={webhook.enabled}
+                        disabled={togglingWebhooks.has(webhook.id)}
+                        onCheckedChange={(enabled) => handleToggleEnabled(webhook.id, enabled)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/webhooks/${webhook.id}/logs`}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          disabled={testingWebhooks.has(webhook.id)}
+                          onClick={() => handleTestWebhook(webhook.id)}
+                        >
+                          {testingWebhooks.has(webhook.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <TestTube className="h-4 w-4" />
+                          )}
+                        </Button>
+                        
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/webhooks/${webhook.id}`}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => handleDeleteWebhook(webhook.id)}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

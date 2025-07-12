@@ -235,7 +235,9 @@ class APIClient {
     if (params?.page) searchParams.set('page', params.page.toString())
     if (params?.limit) searchParams.set('limit', params.limit.toString())
     if (params?.sort) {
-      const [field, order] = params.sort.split(':')
+      // Handle both formats: "date-desc" and "date:desc"
+      const separator = params.sort.includes(':') ? ':' : '-'
+      const [field, order] = params.sort.split(separator)
       searchParams.set('sort_by', field)
       searchParams.set('sort_order', order || 'desc')
     }

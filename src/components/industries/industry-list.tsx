@@ -84,111 +84,138 @@ export function IndustryList({ onIndustryUpdated }: IndustryListProps) {
   const builtInIndustries = filteredIndustries.filter(industry => industry.is_built_in)
   const customIndustries = filteredIndustries.filter(industry => !industry.is_built_in)
 
-  const IndustryCard = ({ industry }: { industry: Industry }) => (
-    <Card key={industry.id} className="h-full">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-lg flex items-center gap-2">
-              {industry.is_built_in ? (
-                <Building2 className="h-4 w-4 text-blue-500" />
-              ) : (
-                <Factory className="h-4 w-4 text-green-500" />
-              )}
-              {industry.name}
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant={industry.is_built_in ? "default" : "secondary"}>
-                {industry.is_built_in ? "Built-in" : "Custom"}
-              </Badge>
-              {industry.usage_count !== undefined && (
-                <Badge variant="outline" className="text-xs">
-                  {industry.usage_count} uses
-                </Badge>
-              )}
-            </div>
-          </div>
-          {!industry.is_built_in && (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleEditIndustry(industry)}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDeleteIndustry(industry.id, industry.name)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <CardDescription>{industry.description}</CardDescription>
-        
-        <div className="space-y-3">
-          <div>
-            <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-              <Tag className="h-3 w-3" />
-              Keywords ({industry.keywords.length})
-            </h4>
-            <div className="flex flex-wrap gap-1">
-              {industry.keywords.slice(0, 5).map((keyword) => (
-                <Badge key={`${industry.id}-keyword-${keyword}`} variant="outline" className="text-xs">
-                  {keyword}
-                </Badge>
-              ))}
-              {industry.keywords.length > 5 && (
-                <Badge variant="outline" className="text-xs">
-                  +{industry.keywords.length - 5} more
-                </Badge>
-              )}
-            </div>
-          </div>
+  const IndustryCard = ({ industry }: { industry: Industry }) => {
+    const [expandedKeywords, setExpandedKeywords] = useState(false)
+    const [expandedCategories, setExpandedCategories] = useState(false)
+    const [expandedSources, setExpandedSources] = useState(false)
 
-          <div>
-            <h4 className="text-sm font-medium mb-2">Categories ({industry.common_categories.length})</h4>
-            <div className="flex flex-wrap gap-1">
-              {industry.common_categories.slice(0, 3).map((category) => (
-                <Badge key={`${industry.id}-category-${category}`} variant="secondary" className="text-xs">
-                  {category}
+    return (
+      <Card key={industry.id} className="h-full">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-lg flex items-center gap-2">
+                {industry.is_built_in ? (
+                  <Building2 className="h-4 w-4 text-blue-500" />
+                ) : (
+                  <Factory className="h-4 w-4 text-green-500" />
+                )}
+                {industry.name}
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant={industry.is_built_in ? "default" : "secondary"}>
+                  {industry.is_built_in ? "Built-in" : "Custom"}
                 </Badge>
-              ))}
-              {industry.common_categories.length > 3 && (
-                <Badge variant="secondary" className="text-xs">
-                  +{industry.common_categories.length - 3} more
-                </Badge>
-              )}
+                {industry.usage_count !== undefined && (
+                  <Badge variant="outline" className="text-xs">
+                    {industry.usage_count} uses
+                  </Badge>
+                )}
+              </div>
             </div>
+            {!industry.is_built_in && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEditIndustry(industry)}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeleteIndustry(industry.id, industry.name)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <CardDescription>{industry.description}</CardDescription>
+          
+          <div className="space-y-3">
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                <Tag className="h-3 w-3" />
+                Keywords ({industry.keywords.length})
+              </h4>
+              <div className="flex flex-wrap gap-1">
+                {(expandedKeywords ? industry.keywords : industry.keywords.slice(0, 5)).map((keyword) => (
+                  <Badge key={`${industry.id}-keyword-${keyword}`} variant="outline" className="text-xs h-6">
+                    {keyword}
+                  </Badge>
+                ))}
+                {industry.keywords.length > 5 && (
+                  <Badge 
+                    variant="outline" 
+                    className="text-xs h-6 cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => setExpandedKeywords(!expandedKeywords)}
+                  >
+                    {expandedKeywords 
+                      ? "Show less" 
+                      : `+${industry.keywords.length - 5} more`
+                    }
+                  </Badge>
+                )}
+              </div>
+            </div>
 
-          <div>
-            <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-              <ExternalLink className="h-3 w-3" />
-              Sources ({industry.default_subreddits.length})
-            </h4>
-            <div className="flex flex-wrap gap-1">
-              {industry.default_subreddits.slice(0, 3).map((subreddit) => (
-                <Badge key={`${industry.id}-subreddit-${subreddit}`} variant="outline" className="text-xs">
-                  r/{subreddit}
-                </Badge>
-              ))}
-              {industry.default_subreddits.length > 3 && (
-                <Badge variant="outline" className="text-xs">
-                  +{industry.default_subreddits.length - 3} more
-                </Badge>
-              )}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Categories ({industry.common_categories.length})</h4>
+              <div className="flex flex-wrap gap-1">
+                {(expandedCategories ? industry.common_categories : industry.common_categories.slice(0, 3)).map((category) => (
+                  <Badge key={`${industry.id}-category-${category}`} variant="secondary" className="text-xs h-6">
+                    {category}
+                  </Badge>
+                ))}
+                {industry.common_categories.length > 3 && (
+                  <Badge 
+                    variant="secondary" 
+                    className="text-xs h-6 cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => setExpandedCategories(!expandedCategories)}
+                  >
+                    {expandedCategories 
+                      ? "Show less" 
+                      : `+${industry.common_categories.length - 3} more`
+                    }
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                <ExternalLink className="h-3 w-3" />
+                Sources ({industry.default_subreddits.length})
+              </h4>
+              <div className="flex flex-wrap gap-1">
+                {(expandedSources ? industry.default_subreddits : industry.default_subreddits.slice(0, 3)).map((subreddit) => (
+                  <Badge key={`${industry.id}-subreddit-${subreddit}`} variant="outline" className="text-xs h-6">
+                    r/{subreddit}
+                  </Badge>
+                ))}
+                {industry.default_subreddits.length > 3 && (
+                  <Badge 
+                    variant="outline" 
+                    className="text-xs h-6 cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => setExpandedSources(!expandedSources)}
+                  >
+                    {expandedSources 
+                      ? "Show less" 
+                      : `+${industry.default_subreddits.length - 3} more`
+                    }
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
+        </CardContent>
+      </Card>
+    )
+  }
 
   if (loading) {
     return (

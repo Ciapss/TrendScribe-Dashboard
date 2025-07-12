@@ -31,14 +31,14 @@ export function OverviewCards() {
 
   if (loading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 w-full min-w-0">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
+          <Card key={i} className="min-w-0">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Loading...</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">--</div>
+              <div className="text-xl sm:text-2xl font-bold">--</div>
               <p className="text-xs text-muted-foreground">--</p>
             </CardContent>
           </Card>
@@ -56,53 +56,53 @@ export function OverviewCards() {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <Card>
+    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 w-full min-w-0">
+      <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total Posts</CardTitle>
-          <FileText className="h-4 w-4 text-muted-foreground" />
+          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.totalPosts}</div>
+          <div className="text-xl sm:text-2xl font-bold">{stats.totalPosts}</div>
           <p className="text-xs text-muted-foreground">
             All time generated content
           </p>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Average Quality</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <TrendingUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.averageQualityScore}/100</div>
+          <div className="text-xl sm:text-2xl font-bold">{stats.averageQualityScore}/100</div>
           <p className="text-xs text-muted-foreground">
             Content quality score
           </p>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">This Month</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.postsThisMonth}</div>
+          <div className="text-xl sm:text-2xl font-bold">{stats.postsThisMonth}</div>
           <p className="text-xs text-muted-foreground">
             Posts generated this month
           </p>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Top Industry</CardTitle>
-          <Target className="h-4 w-4 text-muted-foreground" />
+          <Target className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.mostActiveIndustry}</div>
+          <div className="text-xl sm:text-2xl font-bold truncate">{stats.mostActiveIndustry}</div>
           <p className="text-xs text-muted-foreground">
             Most active content category
           </p>
