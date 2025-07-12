@@ -39,14 +39,12 @@ import { Plus, Loader2, TrendingUp } from "lucide-react"
 import { LANGUAGES, LANGUAGE_LABELS, BLOG_TYPES, BLOG_TYPE_LABELS } from "@/lib/constants"
 import { apiClient } from "@/lib/api-client"
 import { TrendSelector } from "@/components/trends/trend-selector"
-import { cn } from "@/lib/utils"
 import type { Trend, TrendFilters, Industry } from "@/types"
 import type { Job } from "@/types/job"
 import { SourceSelector } from "@/components/sources/source-selector"
 import { Separator } from "@/components/ui/separator"
 import { useJobPolling } from "@/hooks/use-job-polling"
 import { DiscoveryJobStorage } from "@/utils/discovery-job-storage"
-import { useIsMobile } from "@/hooks/use-mobile"
 
 const formSchema = z.object({
   generationType: z.enum(["trending", "trending_select", "custom"], {
@@ -84,7 +82,6 @@ interface GenerationFormProps {
 }
 
 export function GenerationForm({ children }: GenerationFormProps) {
-  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [trends, setTrends] = useState<Trend[]>([])

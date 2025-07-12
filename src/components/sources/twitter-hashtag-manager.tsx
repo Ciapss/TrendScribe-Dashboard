@@ -21,13 +21,7 @@ import {
   MoreVertical, 
   Edit, 
   Trash2, 
-  RefreshCw, 
-  CheckCircle, 
-  XCircle,
-  Hash,
-  AlertTriangle,
-  TrendingUp,
-  BarChart3
+  Hash
 } from "lucide-react";
 
 interface TwitterHashtag {
@@ -89,7 +83,6 @@ const DEFAULT_HASHTAGS: Record<string, string[]> = {
 export function TwitterHashtagManager() {
   const [hashtags, setHashtags] = useState<TwitterHashtag[]>([]);
   const [loading, setLoading] = useState(true);
-  const [enabledHashtags, setEnabledHashtags] = useState<Set<string>>(new Set());
   
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -114,13 +107,10 @@ export function TwitterHashtagManager() {
 
   // Expanded industries for viewing hashtags
   const [expandedIndustries, setExpandedIndustries] = useState<Set<string>>(new Set());
-  // Expanded hashtags for detailed view
-  const [expandedHashtags, setExpandedHashtags] = useState<Set<string>>(new Set());
 
   // Load hashtags on component mount
   useEffect(() => {
     loadHashtags();
-    loadSourceConfig();
   }, []);
 
   const loadHashtags = async () => {
@@ -144,24 +134,6 @@ export function TwitterHashtagManager() {
     }
   };
 
-  const loadSourceConfig = async () => {
-    try {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
-      const response = await fetch(`${apiBaseUrl}/sources/config/`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const config = data.config;
-        setEnabledHashtags(new Set(config.twitter_preferences?.enabled_hashtag_ids || []));
-      }
-    } catch (error) {
-      console.error('Failed to load source config:', error);
-    }
-  };
 
   const handleAddHashtag = async () => {
     if (!addFormData.hashtag || !addFormData.industry) {
@@ -175,7 +147,7 @@ export function TwitterHashtagManager() {
       : `#${addFormData.hashtag}`;
 
     try {
-      const response = await apiClient.addUserHashtag({
+      await apiClient.addUserHashtag({
         ...addFormData,
         hashtag: cleanHashtag,
         is_custom: true
@@ -307,22 +279,6 @@ export function TwitterHashtagManager() {
     return hashtags.filter(hashtag => hashtag.industry === industry);
   };
 
-  const getStatusIcon = (hashtag: TwitterHashtag) => {
-    if (!hashtag.enabled) {
-      return <XCircle className="h-4 w-4 text-muted-foreground" />;
-    }
-    return <CheckCircle className="h-4 w-4 text-sky-500" />;
-  };
-
-  const getStatusBadge = (hashtag: TwitterHashtag) => {
-    if (!hashtag.enabled) {
-      return <Badge variant="outline" className="text-xs">Disabled</Badge>;
-    }
-    if (hashtag.last_fetch_at) {
-      return <Badge variant="default" className="text-xs">Active</Badge>;
-    }
-    return <Badge variant="secondary" className="text-xs">Ready</Badge>;
-  };
 
   if (loading) {
     return (

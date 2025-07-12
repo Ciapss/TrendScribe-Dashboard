@@ -1325,7 +1325,25 @@ class APIClient {
         ...hashtag,
         id: hashtagWithId._id || hashtag.id,
       }
-    })
+    }) as Array<{
+      id: string
+      hashtag: string
+      industry: string
+      enabled: boolean
+      is_custom: boolean
+      track_sentiment: boolean
+      min_engagement: number
+      exclude_retweets: boolean
+      exclude_replies: boolean
+      language_filter?: string
+      include_keywords: string[]
+      exclude_keywords: string[]
+      trends_discovered: number
+      avg_trend_score: number
+      last_fetch_at?: string
+      created_at: string
+      updated_at: string
+    }>
   }
 
   async addUserHashtag(hashtagData: {
