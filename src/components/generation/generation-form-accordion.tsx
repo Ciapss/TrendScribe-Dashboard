@@ -73,12 +73,12 @@ const formSchema = z.object({
   customTopic: z.string().optional(),
   language: z.string().min(1, "Please select a language"),
   blogType: z.string().min(1, "Please select a blog post type"),
-  researchDepth: z.enum(["moderate", "deep"]).default("moderate"),
+  researchDepth: z.enum(["moderate", "deep"]),
   
   // Research Caching Parameters
-  useCachedResearch: z.boolean().default(true),
-  maxResearchAgeHours: z.number().min(1).max(168).default(24),
-  forceFreshResearch: z.boolean().default(false),
+  useCachedResearch: z.boolean(),
+  maxResearchAgeHours: z.number().min(1).max(168),
+  forceFreshResearch: z.boolean(),
 }).refine((data) => {
   // Industry required only for trending topics
   if (data.generationType === "trending" && (!data.industry || data.industry.trim() === "")) {
@@ -98,7 +98,18 @@ const formSchema = z.object({
   path: ["industry", "customTopic", "selectedTrendIds"],
 })
 
-type FormData = z.infer<typeof formSchema>
+type FormData = {
+  generationType: "trending" | "trending_select" | "custom"
+  language: string
+  blogType: string
+  researchDepth: "moderate" | "deep"
+  useCachedResearch: boolean
+  maxResearchAgeHours: number
+  forceFreshResearch: boolean
+  industry?: string
+  selectedTrendIds?: string[]
+  customTopic?: string
+}
 
 interface GenerationFormProps {
   children?: React.ReactNode
@@ -186,7 +197,12 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
       language: "en",
       blogType: "informative",
       researchDepth: "moderate",
-      ...loadResearchPreferences(),
+      ...{
+        ...loadResearchPreferences(),
+        useCachedResearch: true,
+        maxResearchAgeHours: 24,
+        forceFreshResearch: false,
+      },
     },
   })
 

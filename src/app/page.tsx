@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { OverviewCards } from "@/components/dashboard/overview-cards"
 import { RecentPosts } from "@/components/dashboard/recent-posts"
 import { ActivityChart } from "@/components/dashboard/activity-chart"
@@ -9,7 +11,36 @@ import { useAuth } from "@/components/auth/auth-provider"
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const router = useRouter()
+  const [isCheckingFirstTime, setIsCheckingFirstTime] = useState(true)
   const isAdmin = user?.role === 'admin'
+
+  useEffect(() => {
+    if (user) {
+      // Check if this is the user's first time visiting
+      const hasVisitedBefore = localStorage.getItem(`trendscribe_visited_${user.username}`)
+      
+      if (!hasVisitedBefore) {
+        // Mark as visited and redirect to help page
+        localStorage.setItem(`trendscribe_visited_${user.username}`, 'true')
+        router.push('/help?welcome=true')
+        return
+      }
+      
+      setIsCheckingFirstTime(false)
+    }
+  }, [user, router])
+
+  // Show loading state while checking first-time status
+  if (isCheckingFirstTime) {
+    return (
+      <RouteGuard requireAuth={true}>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      </RouteGuard>
+    )
+  }
 
   return (
     <RouteGuard requireAuth={true}>

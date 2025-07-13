@@ -15,6 +15,7 @@ import {
   Shield,
   Rss,
   Building2,
+  BookOpen,
 } from "lucide-react"
 
 import {
@@ -72,6 +73,11 @@ const items = [
     title: "Webhooks",
     url: "/webhooks",
     icon: Webhook,
+  },
+  {
+    title: "Help",
+    url: "/help",
+    icon: BookOpen,
   },
 ]
 
