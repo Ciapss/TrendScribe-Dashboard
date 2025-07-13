@@ -2,7 +2,7 @@
 
 import { PostsTable } from "@/components/posts/posts-table"
 import { PostFilters } from "@/components/posts/post-filters"
-import { GenerationForm } from "@/components/generation/generation-form"
+import { GenerationFormAccordion } from "@/components/generation/generation-form-accordion"
 import { RouteGuard } from "@/components/auth/route-guard"
 import { useState } from "react"
 
@@ -21,7 +21,7 @@ export default function PostsPage() {
             Manage and view all your generated blog posts.
           </p>
         </div>
-        <GenerationForm />
+        <GenerationFormAccordion />
       </div>
       
       <PostFilters 

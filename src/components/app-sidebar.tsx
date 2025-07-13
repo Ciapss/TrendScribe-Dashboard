@@ -37,7 +37,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { GenerationForm } from "@/components/generation/generation-form"
+import { GenerationFormAccordion } from "@/components/generation/generation-form-accordion"
 import { useState, useEffect } from "react"
 import { apiClient } from "@/lib/api-client"
 import { useAuth } from "@/components/auth/auth-provider"
@@ -175,13 +175,13 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <div className="p-3 sm:p-4 space-y-3">
-          <GenerationForm>
+          <GenerationFormAccordion>
             <Button className="w-full min-h-[44px]" size="sm">
               <Plus className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">Generate Post</span>
               <span className="sm:hidden">Generate</span>
             </Button>
-          </GenerationForm>
+          </GenerationFormAccordion>
           
           {user && (
             <DropdownMenu>

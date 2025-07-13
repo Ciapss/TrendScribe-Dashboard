@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+;
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Filter, RotateCcw } from "lucide-react";
@@ -83,7 +83,7 @@ export function TrendFilters({
   };
 
   const hasActiveFilters = Object.keys(filters).some(
-    key => key !== "sortBy" && key !== "sortOrder" && filters[key as keyof TrendFilters]
+    key => key !== "sortBy" && key !== "sortOrder" && key !== "search" && filters[key as keyof TrendFilters]
   );
 
   return (
@@ -123,10 +123,6 @@ export function TrendFilters({
                 } else {
                   clearFilter("industry");
                 }
-                // Clear search when industry changes
-                if (filters.search) {
-                  clearFilter("search");
-                }
               }}
               disabled={isLoadingIndustries || disabled}
             >
@@ -162,55 +158,12 @@ export function TrendFilters({
           </div>
         </div>
 
-        {/* Search - only show when industry is selected */}
-        {filters.industry && (
-          <div className="space-y-1">
-            <Label htmlFor="search" className="text-sm font-medium">Search Topics</Label>
-            <div className="relative">
-              <Input
-                id="search"
-                placeholder="Search topics by name or keywords..."
-                value={filters.search || ""}
-                onChange={(e) => updateFilter("search", e.target.value)}
-                className="h-9"
-                disabled={disabled}
-              />
-              {filters.search && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-1 top-1 h-7 w-7 p-0"
-                  onClick={() => clearFilter("search")}
-                  disabled={disabled}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Active Filters */}
         {hasActiveFilters && (
           <div className="space-y-2">
             <Label className="text-sm font-medium">Active Filters</Label>
             <div className="flex flex-wrap gap-1">
-              {filters.search && (
-                <Badge variant="secondary" className="gap-1 h-6">
-                  Search: {filters.search}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0 hover:bg-transparent"
-                    onClick={() => clearFilter("search")}
-                    disabled={disabled}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </Badge>
-              )}
               {filters.industry && (
                 <Badge variant="secondary" className="gap-1 h-6">
                   Industry: {filters.industry}

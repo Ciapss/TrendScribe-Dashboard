@@ -22,7 +22,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -32,19 +31,21 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Plus, Loader2, TrendingUp } from "lucide-react"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Plus, Loader2, TrendingUp, ArrowRight, ArrowLeft, Zap, Search, Edit, ChevronDown, ChevronUp } from "lucide-react"
 import { LANGUAGES, LANGUAGE_LABELS, BLOG_TYPES, BLOG_TYPE_LABELS } from "@/lib/constants"
 import { apiClient } from "@/lib/api-client"
 import { TrendSelector } from "@/components/trends/trend-selector"
 import type { Trend, TrendFilters, Industry } from "@/types"
 import type { Job } from "@/types/job"
 import { SourceSelector } from "@/components/sources/source-selector"
-import { Separator } from "@/components/ui/separator"
 import { useJobPolling } from "@/hooks/use-job-polling"
 import { DiscoveryJobStorage } from "@/utils/discovery-job-storage"
+import { ResearchCacheSettingsComponent } from "@/components/generation/research-cache-settings"
+import { estimateGenerationCost, getTimeEstimate } from "@/utils/cost-estimator"
+import { loadResearchPreferences, saveResearchPreferences } from "@/utils/research-preferences"
+import type { ResearchCacheSettings, CostEstimate } from "@/types"
 
 const formSchema = z.object({
   generationType: z.enum(["trending", "trending_select", "custom"], {
@@ -55,7 +56,12 @@ const formSchema = z.object({
   customTopic: z.string().optional(),
   language: z.string().min(1, "Please select a language"),
   blogType: z.string().min(1, "Please select a blog post type"),
-  enableComprehensiveResearch: z.boolean(),
+  researchDepth: z.enum(["moderate", "deep"]).default("moderate"),
+  
+  // Research Caching Parameters
+  useCachedResearch: z.boolean().default(true),
+  maxResearchAgeHours: z.number().min(1).max(168).default(24),
+  forceFreshResearch: z.boolean().default(false),
 }).refine((data) => {
   // Industry required only for trending topics
   if (data.generationType === "trending" && (!data.industry || data.industry.trim() === "")) {
@@ -83,6 +89,7 @@ interface GenerationFormProps {
 
 export function GenerationForm({ children }: GenerationFormProps) {
   const [open, setOpen] = useState(false)
+  const [currentStep, setCurrentStep] = useState(1)
   const [isGenerating, setIsGenerating] = useState(false)
   const [trends, setTrends] = useState<Trend[]>([])
   const [trendsLoading, setTrendsLoading] = useState(false)
@@ -98,7 +105,11 @@ export function GenerationForm({ children }: GenerationFormProps) {
   })
   const [industries, setIndustries] = useState<Industry[]>([])
   const [industriesLoading, setIndustriesLoading] = useState(false)
+  const [showAdvancedSources, setShowAdvancedSources] = useState(false)
+  const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null)
   const router = useRouter()
+
+  const totalSteps = 4
 
   // Job polling for trend discovery
   const { 
@@ -150,7 +161,8 @@ export function GenerationForm({ children }: GenerationFormProps) {
       customTopic: "",
       language: "en",
       blogType: "informative",
-      enableComprehensiveResearch: true,
+      researchDepth: "moderate",
+      ...loadResearchPreferences(),
     },
   })
 
@@ -301,6 +313,32 @@ export function GenerationForm({ children }: GenerationFormProps) {
     }
   }, [form, loadTrends, trendFilters.industry])
 
+  // Update cost estimate when research settings change
+  const updateCostEstimate = useCallback(() => {
+    const formData = form.getValues()
+    const cacheSettings: ResearchCacheSettings = {
+      use_cached_research: formData.useCachedResearch,
+      max_research_age_hours: formData.maxResearchAgeHours,
+      force_fresh_research: formData.forceFreshResearch,
+    }
+    
+    const topicType = formData.generationType === "custom" ? "custom" : "trending"
+    const estimate = estimateGenerationCost(formData.researchDepth, cacheSettings, topicType)
+    setCostEstimate(estimate)
+  }, [form])
+
+  // Update cost estimate when relevant form fields change
+  useEffect(() => {
+    updateCostEstimate()
+  }, [
+    form.watch("researchDepth"),
+    form.watch("useCachedResearch"), 
+    form.watch("maxResearchAgeHours"),
+    form.watch("forceFreshResearch"),
+    form.watch("generationType"),
+    updateCostEstimate
+  ])
+
   const onSubmit = async (data: FormData) => {
     setIsGenerating(true)
     try {
@@ -322,9 +360,14 @@ export function GenerationForm({ children }: GenerationFormProps) {
         const apiParams = {
           language: data.language,
           blogType: data.blogType,
-          researchDepth: data.enableComprehensiveResearch ? "deep" : "moderate",
+          researchDepth: data.researchDepth,
           selectedTrendIds: data.selectedTrendIds,
           industry: selectedTrend.industry, // Pass the industry from the selected trend
+          
+          // Research caching parameters
+          useCachedResearch: data.useCachedResearch,
+          maxResearchAgeHours: data.maxResearchAgeHours,
+          forceFreshResearch: data.forceFreshResearch,
         }
         
         const response = await apiClient.generateFromSelectedTrends(apiParams)
@@ -340,14 +383,20 @@ export function GenerationForm({ children }: GenerationFormProps) {
         const apiParams = {
           language: data.language,
           blogType: data.blogType,
+          researchDepth: data.researchDepth,
           ...(data.generationType === "trending" && data.industry && {
             industry: data.industry,
           }),
           ...(data.generationType === "custom" && data.customTopic && {
             topic: data.customTopic.trim(),
           }),
+          
+          // Research caching parameters
+          useCachedResearch: data.useCachedResearch,
+          maxResearchAgeHours: data.maxResearchAgeHours,
+          forceFreshResearch: data.forceFreshResearch,
+          
           options: {
-            enableComprehensiveResearch: data.enableComprehensiveResearch,
             generationType: data.generationType,
           },
         }
@@ -378,332 +427,277 @@ export function GenerationForm({ children }: GenerationFormProps) {
 
 
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children || (
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Generate Post
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="w-full max-w-4xl p-0 max-h-[90vh] h-[90vh] flex flex-col">
-        <DialogHeader className="p-6 border-b shrink-0">
-          <DialogTitle className="text-xl">Generate New Blog Post</DialogTitle>
-          <DialogDescription>
-            Generate a blog post from trending topics or provide your own custom topic. Configure the parameters below.
-          </DialogDescription>
-        </DialogHeader>
+  // Reset step to 1 when modal opens/closes
+  useEffect(() => {
+    if (open) {
+      setCurrentStep(1)
+    }
+  }, [open])
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full">
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-6 space-y-6">
-                {/* Generation Type Selection */}
-                <FormField
-                  control={form.control}
-                  name="generationType"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>How would you like to generate your post?</FormLabel>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          className="flex flex-col space-y-2"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="trending" id="trending" />
-                            <label htmlFor="trending" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                              Auto-generate from trending topics
-                            </label>
-                          </div>
-                          <p className="text-xs text-muted-foreground ml-6">
-                            AI will automatically discover and select the best trending topic in your industry
-                          </p>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="trending_select" id="trending_select" />
-                            <label htmlFor="trending_select" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                              Choose from trending topics
-                            </label>
-                          </div>
-                          <p className="text-xs text-muted-foreground ml-6">
-                            Browse and select specific trending topics that interest you
-                          </p>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="custom" id="custom" />
-                            <label htmlFor="custom" className="cursor-pointer text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                              Generate from custom topic
-                            </label>
-                          </div>
-                          <p className="text-xs text-muted-foreground ml-6">
-                            Provide your own specific topic or subject to write about
-                          </p>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+  const handleNext = () => {
+    setCurrentStep(prev => Math.min(prev + 1, totalSteps))
+  }
 
-                {/* Source Selection - Available for all generation types */}
-                <div className="space-y-2">
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Data Sources</Label>
-                    <FormDescription className="text-xs">
-                      Select which sources to use for discovering trends and researching content
-                    </FormDescription>
-                    <SourceSelector 
-                      showWeights={false}
-                      compact={true}
-                    />
-                  </div>
-                  <Separator />
-                </div>
+  const handleBack = () => {
+    setCurrentStep(prev => Math.max(prev - 1, 1))
+  }
 
-                {/* Industry Selection - Only show when generating from trending topics */}
-                {form.watch("generationType") === "trending" && (
-                  <FormField
-                    control={form.control}
-                    name="industry"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Industry *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select an industry" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent side="bottom" sideOffset={4}>
-                            {industriesLoading ? (
-                              <div className="flex items-center justify-center py-2">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span className="ml-2 text-sm">Loading industries...</span>
-                              </div>
-                            ) : (
-                              industries.map((industry) => (
-                                <SelectItem key={industry.id} value={industry.id}>
-                                  {industry.name}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>
-                          Choose the industry to discover trending topics from
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
+  const getStepTitle = (step: number) => {
+    switch (step) {
+      case 1: return "Choose Generation Method"
+      case 2: return "Configure Content"
+      case 3: return "Settings & Options"
+      case 4: return "Review & Generate"
+      default: return "Generate New Blog Post"
+    }
+  }
 
-                {/* Custom Topic - Only show when custom generation is selected */}
-                {form.watch("generationType") === "custom" && (
-                  <FormField
-                    control={form.control}
-                    name="customTopic"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Custom Topic *</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Enter the specific topic you'd like to write about..."
-                            className="min-h-[80px]"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Be specific about the topic, angle, or perspective you want to explore
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
+  const canProceedToNextStep = () => {
+    const generationType = form.watch("generationType")
+    const industry = form.watch("industry")
+    const customTopic = form.watch("customTopic")
+    const selectedTrendIds = form.watch("selectedTrendIds")
 
-                {/* Language Selection */}
-                <FormField
-                  control={form.control}
-                  name="language"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Language *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a language" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent side="bottom" sideOffset={4}>
-                          {LANGUAGES.map((language) => (
-                            <SelectItem key={language} value={language}>
-                              {LANGUAGE_LABELS[language]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        Choose the language for your blog post
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+    switch (currentStep) {
+      case 1:
+        return !!generationType
+      case 2:
+        if (generationType === "trending") {
+          return !!industry
+        }
+        if (generationType === "custom") {
+          return !!customTopic?.trim()
+        }
+        if (generationType === "trending_select") {
+          return !!selectedTrendIds?.length
+        }
+        return false
+      case 3:
+        const language = form.watch("language")
+        const blogType = form.watch("blogType")
+        const useCachedResearch = form.watch("useCachedResearch")
+        const maxResearchAgeHours = form.watch("maxResearchAgeHours")
+        const forceFreshResearch = form.watch("forceFreshResearch")
+        
+        // Validate cache settings
+        if (useCachedResearch && !forceFreshResearch) {
+          if (maxResearchAgeHours < 1 || maxResearchAgeHours > 168) {
+            return false
+          }
+        }
+        
+        return !!language && !!blogType
+      default:
+        return true
+    }
+  }
 
-                {/* Blog Type Selection */}
-                <FormField
-                  control={form.control}
-                  name="blogType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Blog Post Type *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a blog post type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent side="bottom" sideOffset={4}>
-                          {BLOG_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {BLOG_TYPE_LABELS[type]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        Choose the style and format for your blog post
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Comprehensive Research */}
-                <FormField
-                  control={form.control}
-                  name="enableComprehensiveResearch"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                      <div className="space-y-0.5">
-                        <FormLabel>Comprehensive Research Mode</FormLabel>
-                        <FormDescription>
-                          Enable deeper research with more sources (increases generation time and cost)
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                {/* Estimated Generation Time */}
-                <div className="bg-muted/50 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Estimated Generation Time</span>
-                    <Badge variant="secondary">
-                      {form.watch("enableComprehensiveResearch") ? "4-6 minutes" : "3-4 minutes"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Time may vary based on topic complexity and current system load
-                  </p>
-                </div>
-              </div>
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-semibold">How would you like to generate your post?</h3>
+              <p className="text-sm text-muted-foreground">
+                Choose the method that best fits your content creation needs
+              </p>
             </div>
+            
+            <FormField
+              control={form.control}
+              name="generationType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <div className="space-y-3 sm:space-y-4">
+                      <Card 
+                        className={`cursor-pointer transition-all hover:shadow-md active:scale-[0.98] ${
+                          field.value === "trending" ? "ring-2 ring-primary bg-primary/5" : ""
+                        }`}
+                        onClick={() => field.onChange("trending")}
+                      >
+                        <CardHeader className="p-3 sm:p-4">
+                          <div className="flex items-start space-x-2 sm:space-x-3">
+                            <div className="p-1.5 sm:p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                              <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <CardTitle className="text-sm sm:text-base leading-tight">Auto-generate from trending topics</CardTitle>
+                              <CardDescription className="text-xs sm:text-sm mt-0.5 sm:mt-1">
+                                AI automatically discovers and selects the best trending topic in your industry
+                              </CardDescription>
+                            </div>
+                            <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 flex-shrink-0 ${
+                              field.value === "trending" ? "bg-primary border-primary" : "border-border"
+                            }`} />
+                          </div>
+                        </CardHeader>
+                      </Card>
 
-            {/* Trend Selector Section - Show within the same scroll area */}
+                      <Card 
+                        className={`cursor-pointer transition-all hover:shadow-md active:scale-[0.98] ${
+                          field.value === "trending_select" ? "ring-2 ring-primary bg-primary/5" : ""
+                        }`}
+                        onClick={() => field.onChange("trending_select")}
+                      >
+                        <CardHeader className="p-3 sm:p-4">
+                          <div className="flex items-start space-x-2 sm:space-x-3">
+                            <div className="p-1.5 sm:p-2 bg-green-100 rounded-lg flex-shrink-0">
+                              <Search className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <CardTitle className="text-sm sm:text-base leading-tight">Choose from trending topics</CardTitle>
+                              <CardDescription className="text-xs sm:text-sm mt-0.5 sm:mt-1">
+                                Browse and select specific trending topics that interest you
+                              </CardDescription>
+                            </div>
+                            <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 flex-shrink-0 ${
+                              field.value === "trending_select" ? "bg-primary border-primary" : "border-border"
+                            }`} />
+                          </div>
+                        </CardHeader>
+                      </Card>
+
+                      <Card 
+                        className={`cursor-pointer transition-all hover:shadow-md active:scale-[0.98] ${
+                          field.value === "custom" ? "ring-2 ring-primary bg-primary/5" : ""
+                        }`}
+                        onClick={() => field.onChange("custom")}
+                      >
+                        <CardHeader className="p-3 sm:p-4">
+                          <div className="flex items-start space-x-2 sm:space-x-3">
+                            <div className="p-1.5 sm:p-2 bg-purple-100 rounded-lg flex-shrink-0">
+                              <Edit className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <CardTitle className="text-sm sm:text-base leading-tight">Generate from custom topic</CardTitle>
+                              <CardDescription className="text-xs sm:text-sm mt-0.5 sm:mt-1">
+                                Provide your own specific topic or subject to write about
+                              </CardDescription>
+                            </div>
+                            <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 flex-shrink-0 ${
+                              field.value === "custom" ? "bg-primary border-primary" : "border-border"
+                            }`} />
+                          </div>
+                        </CardHeader>
+                      </Card>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )
+
+      case 2:
+        return (
+          <div className="space-y-6 flex flex-col h-full">
+            {/* Industry Selection for Trending */}
+            {form.watch("generationType") === "trending" && (
+              <FormField
+                control={form.control}
+                name="industry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base font-semibold">Select Industry</FormLabel>
+                    <FormDescription>
+                      Choose the industry to discover trending topics from
+                    </FormDescription>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="h-10 sm:h-12">
+                          <SelectValue placeholder="Select an industry" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {industriesLoading ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="ml-2 text-sm">Loading industries...</span>
+                          </div>
+                        ) : (
+                          industries.map((industry) => (
+                            <SelectItem key={industry.id} value={industry.id}>
+                              {industry.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Custom Topic Input */}
+            {form.watch("generationType") === "custom" && (
+              <FormField
+                control={form.control}
+                name="customTopic"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base font-semibold">Custom Topic</FormLabel>
+                    <FormDescription>
+                      Be specific about the topic, angle, or perspective you want to explore
+                    </FormDescription>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Enter the specific topic you'd like to write about..."
+                        className="min-h-[100px] sm:min-h-[120px] text-sm sm:text-base"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Trend Selection */}
             {form.watch("generationType") === "trending_select" && (
-              <div className="border-t bg-muted/30">
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-blue-500" />
-                    <h3 className="text-lg font-semibold">Choose from Trending Topics</h3>
-                    {isDiscoveryActive && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Discovering topics...
+              <div className="space-y-4 flex-1 min-h-0">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-blue-500" />
+                  <h3 className="text-base font-semibold">Choose Trending Topics</h3>
+                  {isDiscoveryActive && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Discovering...
+                    </div>
+                  )}
+                </div>
+
+                {/* Discovery Job Status */}
+                {discoveryJob && isDiscoveryActive && (
+                  <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        <span className="text-sm font-medium text-blue-800">
+                          Discovering trending topics for {trendFilters.industry}
+                        </span>
                       </div>
-                    )}
-                    {usingSyncMode && (
-                      <div className="flex items-center gap-2 text-sm text-orange-600">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Discovering (sync mode)...
-                      </div>
-                    )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (discoveryJobId) {
+                            DiscoveryJobStorage.updateJobStatus(discoveryJobId, 'cancelled')
+                          }
+                          cancelDiscoveryJob()
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
+                )}
 
-                  {/* Discovery Job Status */}
-                  {discoveryJob && isDiscoveryActive && (
-                    <div className="p-3 border rounded-lg bg-blue-50 border-blue-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                          <span className="text-sm font-medium text-blue-800">
-                            Discovering trending topics for {trendFilters.industry}
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            // Remove from storage and cancel job
-                            if (discoveryJobId) {
-                              DiscoveryJobStorage.updateJobStatus(discoveryJobId, 'cancelled')
-                            }
-                            cancelDiscoveryJob()
-                          }}
-                          className="h-7 text-xs"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                      <div className="mt-2 text-xs text-blue-700">
-                        Job ID: {discoveryJobId} - You can close this dialog and check the Jobs page for progress.
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Job Recovery Notice */}
-                  {discoveryJobId && !discoveryJob && (
-                    <div className="p-3 border rounded-lg bg-green-50 border-green-200">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-green-600" />
-                        <span className="text-sm font-medium text-green-800">
-                          Reconnected to discovery job for {trendFilters.industry}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs text-green-700">
-                        Job ID: {discoveryJobId} - Checking status...
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sync Mode Status */}
-                  {usingSyncMode && (
-                    <div className="p-3 border rounded-lg bg-orange-50 border-orange-200">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-orange-600" />
-                        <span className="text-sm font-medium text-orange-800">
-                          Discovering trending topics for {trendFilters.industry} (Direct Mode)
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs text-orange-700">
-                        Running in direct mode - async job system not available. Please wait...
-                      </div>
-                    </div>
-                  )}
-
+                <div className="flex-1 min-h-0 overflow-y-auto">
                   <TrendSelector
                     trends={trends}
                     selectedTrendIds={form.watch("selectedTrendIds") || []}
@@ -719,40 +713,372 @@ export function GenerationForm({ children }: GenerationFormProps) {
                     onLoadTopics={() => loadTrends(true)}
                     disabled={isDiscoveryActive || usingSyncMode}
                   />
-                  {form.formState.errors.selectedTrendIds && (
-                    <p className="text-sm text-destructive">
-                      Please select at least one trending topic to continue
-                    </p>
-                  )}
                 </div>
+                
+                {form.formState.errors.selectedTrendIds && (
+                  <p className="text-sm text-destructive">
+                    Please select at least one trending topic to continue
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Fixed Footer with Submit Buttons */}
-            <div className="border-t bg-background p-6 flex gap-3 justify-end shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={isGenerating}
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Starting Generation...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Generate
-                  </>
+          </div>
+        )
+
+      case 3:
+        return (
+          <div className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-2">
+              {/* Language Selection */}
+              <FormField
+                control={form.control}
+                name="language"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base font-semibold">Language</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="h-10 sm:h-12">
+                          <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {LANGUAGES.map((language) => (
+                          <SelectItem key={language} value={language}>
+                            {LANGUAGE_LABELS[language]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
                 )}
+              />
+
+              {/* Blog Type Selection */}
+              <FormField
+                control={form.control}
+                name="blogType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base font-semibold">Blog Post Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="h-10 sm:h-12">
+                          <SelectValue placeholder="Select post type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {BLOG_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {BLOG_TYPE_LABELS[type]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Research Depth Selection */}
+            <FormField
+              control={form.control}
+              name="researchDepth"
+              render={({ field }) => (
+                <FormItem>
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <CardTitle className="text-base">Research Depth</CardTitle>
+                          <CardDescription>
+                            Choose how comprehensive the research should be
+                          </CardDescription>
+                        </div>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="w-40">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="moderate">Moderate Research</SelectItem>
+                            <SelectItem value="deep">Deep Research</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                </FormItem>
+              )}
+            />
+
+            {/* Research Cache Settings */}
+            <ResearchCacheSettingsComponent
+              settings={{
+                use_cached_research: form.watch("useCachedResearch"),
+                max_research_age_hours: form.watch("maxResearchAgeHours"),
+                force_fresh_research: form.watch("forceFreshResearch"),
+              }}
+              onChange={(settings) => {
+                form.setValue("useCachedResearch", settings.use_cached_research)
+                form.setValue("maxResearchAgeHours", settings.max_research_age_hours)
+                form.setValue("forceFreshResearch", settings.force_fresh_research)
+                
+                // Save preferences to localStorage
+                saveResearchPreferences(settings)
+              }}
+              costEstimate={costEstimate || undefined}
+            />
+
+            {/* Advanced Source Settings */}
+            <div className="space-y-4">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-between"
+                onClick={() => setShowAdvancedSources(!showAdvancedSources)}
+                type="button"
+              >
+                <span>Advanced Source Settings</span>
+                {showAdvancedSources ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
+              {showAdvancedSources && (
+                <Card>
+                  <CardHeader>
+                    <div className="space-y-2">
+                      <CardTitle className="text-base">Data Sources</CardTitle>
+                      <CardDescription>
+                        Select which sources to use for discovering trends and researching content
+                      </CardDescription>
+                      <SourceSelector 
+                        showWeights={false}
+                        compact={true}
+                      />
+                    </div>
+                  </CardHeader>
+                </Card>
+              )}
+            </div>
+
+            {/* Generation Time Estimate */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Estimated Generation Time</CardTitle>
+                    <CardDescription>
+                      Time may vary based on topic complexity and system load
+                    </CardDescription>
+                  </div>
+                  <Badge variant="secondary" className="text-sm">
+                    {(() => {
+                      const cacheSettings: ResearchCacheSettings = {
+                        use_cached_research: form.watch("useCachedResearch"),
+                        max_research_age_hours: form.watch("maxResearchAgeHours"),
+                        force_fresh_research: form.watch("forceFreshResearch"),
+                      }
+                      const timeEstimate = getTimeEstimate(form.watch("researchDepth"), cacheSettings)
+                      return timeEstimate.description
+                    })()}
+                  </Badge>
+                </div>
+              </CardHeader>
+            </Card>
+          </div>
+        )
+
+      case 4:
+        const generationType = form.watch("generationType")
+        const industry = form.watch("industry")
+        const customTopic = form.watch("customTopic")
+        const selectedTrendIds = form.watch("selectedTrendIds")
+        const language = form.watch("language")
+        const blogType = form.watch("blogType")
+        const researchDepth = form.watch("researchDepth")
+        const useCachedResearch = form.watch("useCachedResearch")
+        const maxResearchAgeHours = form.watch("maxResearchAgeHours")
+        const forceFreshResearch = form.watch("forceFreshResearch")
+
+        return (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-semibold">Ready to Generate</h3>
+              <p className="text-sm text-muted-foreground">
+                Review your settings before starting the generation process
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Generation Method */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Generation Method</CardTitle>
+                  <div className="flex items-center space-x-2">
+                    {generationType === "trending" && (
+                      <>
+                        <Zap className="h-4 w-4 text-blue-600" />
+                        <span>Auto-generate from trending topics</span>
+                      </>
+                    )}
+                    {generationType === "trending_select" && (
+                      <>
+                        <Search className="h-4 w-4 text-green-600" />
+                        <span>Choose from trending topics</span>
+                      </>
+                    )}
+                    {generationType === "custom" && (
+                      <>
+                        <Edit className="h-4 w-4 text-purple-600" />
+                        <span>Custom topic</span>
+                      </>
+                    )}
+                  </div>
+                </CardHeader>
+              </Card>
+
+              {/* Content Source */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Content Source</CardTitle>
+                  <div>
+                    {generationType === "trending" && industry && (
+                      <span>Industry: {industries.find(i => i.id === industry)?.name}</span>
+                    )}
+                    {generationType === "custom" && customTopic && (
+                      <span className="line-clamp-2">{customTopic}</span>
+                    )}
+                    {generationType === "trending_select" && selectedTrendIds && (
+                      <span>{selectedTrendIds.length} trending topic(s) selected</span>
+                    )}
+                  </div>
+                </CardHeader>
+              </Card>
+
+              {/* Settings */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Settings</CardTitle>
+                  <div className="space-y-1 text-sm">
+                    <div>Language: {LANGUAGE_LABELS[language]}</div>
+                    <div>Type: {BLOG_TYPE_LABELS[blogType]}</div>
+                    <div>Research Depth: {researchDepth === "deep" ? "Deep Research" : "Moderate Research"}</div>
+                    <div>Cache Settings: {forceFreshResearch ? "Fresh Only" : useCachedResearch ? `Cache enabled (${maxResearchAgeHours}h)` : "Cache disabled"}</div>
+                  </div>
+                </CardHeader>
+              </Card>
+            </div>
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {children || (
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Generate Post
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="w-full max-w-2xl max-h-[90vh] sm:max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="p-4 sm:p-6 border-b shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-lg sm:text-xl truncate">{getStepTitle(currentStep)}</DialogTitle>
+              <DialogDescription className="mt-1 text-sm">
+                Step {currentStep} of {totalSteps}
+              </DialogDescription>
+            </div>
+            <div className="flex space-x-1 ml-4">
+              {Array.from({ length: totalSteps }, (_, i) => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${
+                    i + 1 <= currentStep ? "bg-primary" : "bg-muted"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full">
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6">
+              {renderStepContent()}
+            </div>
+
+            {/* Fixed Footer with Navigation */}
+            <div className="border-t bg-background p-3 sm:p-6 flex gap-2 sm:gap-3 justify-between shrink-0">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  size="sm"
+                  className="sm:h-10"
+                >
+                  Cancel
+                </Button>
+                {currentStep > 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleBack}
+                    size="sm"
+                    className="sm:h-10"
+                  >
+                    <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Back</span>
+                  </Button>
+                )}
+              </div>
+              
+              <div>
+                {currentStep < totalSteps ? (
+                  <Button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={!canProceedToNextStep()}
+                    size="sm"
+                    className="sm:h-10"
+                  >
+                    <span className="hidden sm:inline">Next</span>
+                    <span className="sm:hidden">Next</span>
+                    <ArrowRight className="ml-1 sm:ml-2 h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button 
+                    type="submit" 
+                    disabled={isGenerating || !canProceedToNextStep()}
+                    size="sm"
+                    className="sm:h-10"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="mr-1 sm:mr-2 h-4 w-4 animate-spin" />
+                        <span className="hidden sm:inline">Starting Generation...</span>
+                        <span className="sm:hidden">Starting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="mr-1 sm:mr-2 h-4 w-4" />
+                        <span className="hidden sm:inline">Generate Post</span>
+                        <span className="sm:hidden">Generate</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
           </form>
         </Form>

@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+;
 import { TrendFilters } from "./trend-filters";
 import type { Trend, TrendFilters as TrendFiltersType } from "@/types";
-import { ChevronDown, ChevronRight, ChevronLeft, HelpCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 interface TrendSelectorProps {
@@ -115,6 +117,62 @@ export function TrendSelector({
     return { totalMentions, avgEngagement: normalizedEngagement };
   }, []);
 
+  // Filter trends based on search term - whole word matching
+  const filteredTrends = useMemo(() => {
+    if (!filters.search || !filters.search.trim()) {
+      return trends;
+    }
+    
+    const searchTerm = filters.search.toLowerCase().trim();
+    
+    // Create regex for whole word matching
+    const createWordRegex = (term: string) => {
+      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escapedTerm}\\b`, 'i');
+    };
+    
+    const wordRegex = createWordRegex(searchTerm);
+    
+    return trends.filter(trend => {
+      // Search in topic title (whole words)
+      if (wordRegex.test(trend.topic)) {
+        return true;
+      }
+      
+      // Search in description (whole words)
+      if (trend.description && wordRegex.test(trend.description)) {
+        return true;
+      }
+      
+      // Search in keywords (exact keyword matches)
+      if (trend.keywords && trend.keywords.some(keyword => 
+        keyword.toLowerCase() === searchTerm || wordRegex.test(keyword)
+      )) {
+        return true;
+      }
+      
+      return false;
+    });
+  }, [trends, filters.search]);
+
+  // Helper function to highlight search terms - whole word matching
+  const highlightSearchTerm = useCallback((text: string, searchTerm: string) => {
+    if (!searchTerm || !searchTerm.trim()) {
+      return text;
+    }
+    
+    // Create regex for whole word highlighting
+    const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(\\b${escapedTerm}\\b)`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, index) => 
+      regex.test(part) ? 
+        <mark key={index} className="bg-yellow-200 text-yellow-900 px-0.5 rounded">{part}</mark> : 
+        part
+    );
+  }, []);
+
 
   const renderPagination = () => {
     if (totalPages <= 1) return null;
@@ -123,49 +181,92 @@ export function TrendSelector({
     const endItem = Math.min(currentPage * 10, totalCount);
 
     return (
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Showing {startItem}-{endItem} of {totalCount} trends
+      <div className="space-y-4">
+        {/* Mobile pagination info */}
+        <div className="text-center text-sm text-muted-foreground lg:hidden">
+          Page {currentPage} of {totalPages} • {totalCount} total trends
         </div>
         
-        <div className="flex items-center gap-2">
+        {/* Desktop pagination info */}
+        <div className="hidden lg:flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {startItem}-{endItem} of {totalCount} trends
+          </div>
+        </div>
+        
+        {/* Pagination controls */}
+        <div className="flex items-center justify-center lg:justify-end gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
+            className="px-3"
           >
             <ChevronLeft className="h-4 w-4" />
-            Previous
+            <span className="hidden sm:inline ml-1">Previous</span>
           </Button>
           
+          {/* Page numbers - responsive display */}
           <div className="flex items-center gap-1">
-            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-              let pageNum;
-              if (totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
+            {/* Mobile: Show 3 pages max */}
+            <div className="flex items-center gap-1 sm:hidden">
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 2) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 1) {
+                  pageNum = totalPages - 2 + i;
+                } else {
+                  pageNum = currentPage - 1 + i;
+                }
 
-              return (
-                <Button
-                  type="button"
-                  key={pageNum}
-                  variant={currentPage === pageNum ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onPageChange(pageNum)}
-                  className="w-8"
-                >
-                  {pageNum}
-                </Button>
-              );
-            })}
+                return (
+                  <Button
+                    type="button"
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onPageChange(pageNum)}
+                    className="w-9 h-9"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            {/* Desktop: Show 5 pages max */}
+            <div className="hidden sm:flex items-center gap-1">
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+
+                return (
+                  <Button
+                    type="button"
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onPageChange(pageNum)}
+                    className="w-8 h-8"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
           
           <Button
@@ -174,8 +275,9 @@ export function TrendSelector({
             size="sm"
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
+            className="px-3"
           >
-            Next
+            <span className="hidden sm:inline mr-1">Next</span>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -197,18 +299,64 @@ export function TrendSelector({
   }
 
   return (
-    <div className={cn("space-y-6", className)}>
-      {/* Filters */}
-      <TrendFilters
-        filters={filters}
-        onFiltersChange={onFiltersChange}
-        industries={industries}
-        statuses={statuses}
-        onLoadTopics={onLoadTopics}
-        disabled={disabled}
-      />
+    <div className={cn("space-y-4", className)}>
+      {/* Left Column: Filters and Search */}
+      <div className="lg:col-span-1 space-y-4">
+        {/* Filters */}
+        <TrendFilters
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+          industries={industries}
+          statuses={statuses}
+          onLoadTopics={onLoadTopics}
+          disabled={disabled}
+        />
 
-      {/* Trending Topics Table */}
+        {/* Search Section - Between filters and results */}
+        {filters.industry && totalCount > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="space-y-2">
+                <Label htmlFor="search" className="text-sm font-medium flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  Search Topics
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="search"
+                    placeholder="Search topics by name or keywords..."
+                    value={filters.search || ""}
+                    onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
+                    className="h-9"
+                    disabled={disabled}
+                  />
+                  {filters.search && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1 h-7 w-7 p-0"
+                      onClick={() => onFiltersChange({ ...filters, search: "" })}
+                      disabled={disabled}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+                {filters.search && (
+                  <p className="text-xs text-muted-foreground">
+                    {filteredTrends.length} of {totalCount} topics match your search
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Right Column: Trending Topics Table */}
+      <div className="lg:col-span-1">
+        {/* Trending Topics Table */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -216,7 +364,10 @@ export function TrendSelector({
               Trending Topics
               {!loading && (
                 <Badge variant="secondary">
-                  {totalCount} total
+                  {filters.search ? 
+                    `${filteredTrends.length} of ${totalCount}` : 
+                    `${totalCount} total`
+                  }
                 </Badge>
               )}
             </CardTitle>
@@ -255,9 +406,14 @@ export function TrendSelector({
                 </div>
               ))}
             </div>
-          ) : trends.length === 0 ? (
+          ) : filteredTrends.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-muted-foreground">No trends found matching your criteria</p>
+              <p className="text-muted-foreground">
+                {filters.search ? 
+                  `No trends found matching "${filters.search}"` : 
+                  "No trends found matching your criteria"
+                }
+              </p>
               <Button
                 type="button"
                 variant="outline"
@@ -269,180 +425,354 @@ export function TrendSelector({
               </Button>
             </div>
           ) : (
-            <div className="max-h-96 overflow-y-auto border rounded-lg">
-              <TooltipProvider>
-                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 p-3 border-b font-medium text-sm bg-muted/50 sticky top-0 z-10">
-                  <div>Topic</div>
-                  
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="text-center w-16 flex items-center justify-center gap-1 cursor-help">
-                        Score
-                        <HelpCircle className="h-3 w-3 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        Trend score based on multiple factors including engagement, 
-                        recency, and relevance. Scale: 0-10 (higher is better).
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="text-center w-20 flex items-center justify-center gap-1 cursor-help">
-                        Mentions
-                        <HelpCircle className="h-3 w-3 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        Total mentions across all sources (Reddit upvotes, comments, 
-                        social media interactions, etc.) for this topic.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="text-center w-24 flex items-center justify-center gap-1 cursor-help">
-                        Engagement
-                        <HelpCircle className="h-3 w-3 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        Average engagement rate calculated from source interactions 
-                        (likes, shares, comments) relative to reach.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
-                  <div className="w-8"></div>
-                </div>
-              </TooltipProvider>
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
               
-              {trends.map((trend) => {
+              {filteredTrends.map((trend) => {
                 const isSelected = selectedTrendIds.includes(trend.id);
                 const isExpanded = expandedRows.has(trend.id);
                 const { totalMentions, avgEngagement } = calculateEngagement(trend);
                 
                 return (
-                  <div key={trend.id} className="border-b last:border-b-0">
-                    {/* Main Row */}
-                    <div 
-                      className={cn(
-                        "grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 p-3 transition-colors",
-                        !disabled && "hover:bg-muted/50 cursor-pointer",
-                        disabled && "opacity-60 cursor-not-allowed",
-                        isSelected && "bg-blue-50 border-l-4 border-l-blue-500"
-                      )}
-                      onClick={disabled ? undefined : () => toggleRowExpansion(trend.id)}
-                    >
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">{trend.topic}</div>
-                        <div className="text-xs text-muted-foreground truncate">{trend.description}</div>
-                      </div>
-                      
-                      <div className="text-center w-16">
-                        <div className={cn(
-                          "inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold",
-                          trend.trend_score >= 8 ? "bg-green-100 text-green-800" :
-                          trend.trend_score >= 6 ? "bg-yellow-100 text-yellow-800" :
-                          "bg-red-100 text-red-800"
-                        )}>
-                          {trend.trend_score.toFixed(1)}
-                        </div>
-                      </div>
-                      
-                      <div className="text-center w-20 text-sm">
-                        {totalMentions.toLocaleString()}
-                      </div>
-                      
-                      <div className="text-center w-24 text-sm">
-                        {avgEngagement.toFixed(1)}%
-                      </div>
-                      
-                      <button 
-                        className="w-8 h-8 flex items-center justify-center"
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    
-                    {/* Expanded Content */}
-                    {isExpanded && (
-                      <div className="p-4 bg-muted/25 border-t">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <h4 className="font-medium text-sm mb-2">Details</h4>
-                            <div className="space-y-1 text-sm">
-                              <div><span className="text-muted-foreground">Industry:</span> {trend.industry}</div>
-                              <div><span className="text-muted-foreground">Mentions:</span> {totalMentions.toLocaleString()}</div>
-                              <div><span className="text-muted-foreground">Discovered:</span> {new Date(trend.discovered_at).toLocaleDateString()}</div>
+                  <div key={trend.id} className={cn(
+                    "border rounded-lg transition-all duration-200",
+                    !disabled && "hover:shadow-md cursor-pointer active:scale-[0.99]",
+                    disabled && "opacity-60 cursor-not-allowed",
+                    isSelected && "ring-2 ring-primary bg-primary/5 shadow-md"
+                  )}>
+                    {/* Mobile/Tablet Layout */}
+                    <div className="lg:hidden">
+                      <div className="p-3">
+                        {/* Main Title Section - Full Width */}
+                        <div 
+                          className="cursor-pointer"
+                          onClick={disabled ? undefined : () => handleRowSelect(trend.id)}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1 min-w-0 mr-3">
+                              <h3 className="font-semibold text-base leading-tight mb-1">
+                                {filters.search ? 
+                                  highlightSearchTerm(trend.topic, filters.search) : 
+                                  trend.topic
+                                }
+                              </h3>
+                              <p className="text-sm text-muted-foreground leading-snug line-clamp-2">
+                                {filters.search ? 
+                                  highlightSearchTerm(trend.description || "", filters.search) : 
+                                  trend.description
+                                }
+                              </p>
                             </div>
+                            
+                            {isSelected && (
+                              <Badge variant="default" className="flex-shrink-0 text-xs">
+                                Selected
+                              </Badge>
+                            )}
                           </div>
-                          
-                          <div>
-                            <h4 className="font-medium text-sm mb-2">Keywords & Sources</h4>
-                            <div className="space-y-2">
-                              {trend.keywords && trend.keywords.length > 0 && (
+                        </div>
+
+                        {/* Accordion Toggle for Details */}
+                        <button 
+                          className="w-full flex items-center justify-between py-2 mt-2 border-t text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleRowExpansion(trend.id);
+                          }}
+                        >
+                          <span>View details</span>
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                        </button>
+
+                        {/* Expandable Details */}
+                        {isExpanded && (
+                          <div className="space-y-4 pt-3">
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-center">
+                                <div className={cn(
+                                  "inline-flex items-center justify-center px-3 py-2 rounded-full text-sm font-bold mb-1",
+                                  trend.trend_score >= 8 ? "bg-green-100 text-green-800" :
+                                  trend.trend_score >= 6 ? "bg-yellow-100 text-yellow-800" :
+                                  "bg-red-100 text-red-800"
+                                )}>
+                                  {trend.trend_score.toFixed(1)}
+                                </div>
+                                <div className="text-xs text-muted-foreground">Score</div>
+                              </div>
+                              
+                              <div className="text-center">
+                                <div className="text-lg font-bold mb-1">
+                                  {totalMentions.toLocaleString()}
+                                </div>
+                                <div className="text-xs text-muted-foreground">Mentions</div>
+                              </div>
+                              
+                              <div className="text-center">
+                                <div className="text-lg font-bold mb-1">
+                                  {avgEngagement.toFixed(1)}%
+                                </div>
+                                <div className="text-xs text-muted-foreground">Engagement</div>
+                              </div>
+                            </div>
+
+                            {/* Additional Details */}
+                            <div className="space-y-2 pt-2 border-t">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Industry:</span>
+                                <span className="font-medium">{trend.industry}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Discovered:</span>
+                                <span className="font-medium">{new Date(trend.discovered_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+
+                            {/* Keywords */}
+                            {trend.keywords && trend.keywords.length > 0 && (
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium">Keywords</h4>
                                 <div className="flex flex-wrap gap-1">
-                                  {(expandedKeywords.has(trend.id) ? trend.keywords : trend.keywords.slice(0, 5)).map((keyword, index) => (
+                                  {(expandedKeywords.has(trend.id) ? trend.keywords : trend.keywords.slice(0, 3)).map((keyword, index) => (
                                     <Badge key={index} variant="secondary" className="text-xs">
                                       {keyword}
                                     </Badge>
                                   ))}
-                                  {trend.keywords.length > 5 && (
+                                  {trend.keywords.length > 3 && (
                                     <Badge 
                                       variant="secondary" 
-                                      className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                                      className="text-xs cursor-pointer hover:bg-secondary/80"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         toggleKeywordsExpand(trend.id);
                                       }}
                                     >
-                                      {expandedKeywords.has(trend.id) ? 'Show less' : `+${trend.keywords.length - 5} more`}
+                                      {expandedKeywords.has(trend.id) ? 'Less' : `+${trend.keywords.length - 3}`}
                                     </Badge>
                                   )}
                                 </div>
-                              )}
-                              
-                              {trend.sources && trend.sources.length > 0 && (
+                              </div>
+                            )}
+
+                            {/* Sources */}
+                            {trend.sources && trend.sources.length > 0 && (
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium">Sources</h4>
                                 <div className="flex flex-wrap gap-1">
-                                  {[...new Set(trend.sources.map(s => s.platform || 'Unknown'))].slice(0, 3).map((platform, index) => (
-                                    <Badge key={index} variant="outline" className="text-xs">
-                                      {platform}
-                                    </Badge>
-                                  ))}
+                                  {(() => {
+                                    // Get platform from trend-level collection_source field
+                                    const collectionSource = trend.collection_source;
+                                    
+                                    if (collectionSource) {
+                                      // Map platform names to user-friendly labels
+                                      const getPlatformLabel = (platform: string) => {
+                                        const lower = platform.toLowerCase();
+                                        if (lower === 'twitter' || lower === 'x') return 'hashtag';
+                                        if (lower === 'reddit') return 'reddit';
+                                        if (lower === 'rss' || lower === 'rss_feeds') return 'rss';
+                                        if (lower === 'linkup') return 'linkup';
+                                        return lower;
+                                      };
+                                      
+                                      return [
+                                        <Badge key={0} variant="outline" className="text-xs">
+                                          {getPlatformLabel(collectionSource)}
+                                        </Badge>
+                                      ];
+                                    }
+                                    
+                                    // Fallback to "Unknown" if no collection_source found
+                                    return [
+                                      <Badge key={0} variant="outline" className="text-xs">
+                                        unknown
+                                      </Badge>
+                                    ];
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Desktop Layout */}
+                    <div className="hidden lg:block">
+                      <div className="p-3">
+                        {/* Row 1: Title Section */}
+                        <div 
+                          className="cursor-pointer"
+                          onClick={disabled ? undefined : () => handleRowSelect(trend.id)}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex-1 min-w-0 mr-3">
+                              <h3 className="font-semibold text-base leading-tight">
+                                {filters.search ? 
+                                  highlightSearchTerm(trend.topic, filters.search) : 
+                                  trend.topic
+                                }
+                              </h3>
+                            </div>
+                            
+                            {/* Selection Badge */}
+                            {isSelected && (
+                              <Badge variant="default" className="flex-shrink-0 text-xs">
+                                Selected
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          {/* Row 2: Metrics - More Compact */}
+                          <div className="flex items-center gap-4">
+                            {/* Score */}
+                            <div className="flex items-center gap-1">
+                              <div className={cn(
+                                "inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-bold",
+                                trend.trend_score >= 8 ? "bg-green-100 text-green-800" :
+                                trend.trend_score >= 6 ? "bg-yellow-100 text-yellow-800" :
+                                "bg-red-100 text-red-800"
+                              )}>
+                                {trend.trend_score.toFixed(1)}
+                              </div>
+                              <span className="text-xs text-muted-foreground">Score</span>
+                            </div>
+                            
+                            {/* Mentions */}
+                            <div className="flex items-center gap-1">
+                              <div className="text-sm font-semibold">
+                                {totalMentions.toLocaleString()}
+                              </div>
+                              <span className="text-xs text-muted-foreground">Mentions</span>
+                            </div>
+                            
+                            {/* Engagement */}
+                            <div className="flex items-center gap-1">
+                              <div className="text-sm font-semibold">
+                                {avgEngagement.toFixed(1)}%
+                              </div>
+                              <span className="text-xs text-muted-foreground">Engagement</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Accordion Toggle for Additional Details */}
+                        <button 
+                          type="button"
+                          className="w-full flex items-center justify-between py-2 mt-2 border-t text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            toggleRowExpansion(trend.id);
+                          }}
+                        >
+                          <span>Additional details</span>
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                        </button>
+
+                        {/* Expandable Additional Details */}
+                        {isExpanded && (
+                          <div className="space-y-4 pt-3">
+                            {/* Description */}
+                            <div className="pt-2 border-t">
+                              <p className="text-sm text-muted-foreground leading-relaxed">
+                                {filters.search ? 
+                                  highlightSearchTerm(trend.description || "", filters.search) : 
+                                  trend.description
+                                }
+                              </p>
+                            </div>
+
+                            {/* Industry and Discovery Info */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Industry:</span>
+                                <span className="font-medium">{trend.industry}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Discovered:</span>
+                                <span className="font-medium">{new Date(trend.discovered_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+
+                            {/* Keywords and Sources */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Keywords */}
+                              {trend.keywords && trend.keywords.length > 0 && (
+                                <div className="space-y-2">
+                                  <h4 className="text-sm font-medium">Keywords</h4>
+                                  <div className="flex flex-wrap gap-1">
+                                    {(expandedKeywords.has(trend.id) ? trend.keywords : trend.keywords.slice(0, 5)).map((keyword, index) => (
+                                      <Badge key={index} variant="secondary" className="text-xs">
+                                        {keyword}
+                                      </Badge>
+                                    ))}
+                                    {trend.keywords.length > 5 && (
+                                      <Badge 
+                                        variant="secondary" 
+                                        className="text-xs cursor-pointer hover:bg-secondary/80"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          e.preventDefault();
+                                          toggleKeywordsExpand(trend.id);
+                                        }}
+                                      >
+                                        {expandedKeywords.has(trend.id) ? 'Show less' : `+${trend.keywords.length - 5} more`}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Sources */}
+                              {trend.sources && trend.sources.length > 0 && (
+                                <div className="space-y-2">
+                                  <h4 className="text-sm font-medium">Sources</h4>
+                                  <div className="flex flex-wrap gap-1">
+                                    {(() => {
+                                      // Get platform from trend-level collection_source field
+                                      const collectionSource = trend.collection_source;
+                                      
+                                      if (collectionSource) {
+                                        // Map platform names to user-friendly labels
+                                        const getPlatformLabel = (platform: string) => {
+                                          const lower = platform.toLowerCase();
+                                          if (lower === 'twitter' || lower === 'x') return 'hashtag';
+                                          if (lower === 'reddit') return 'reddit';
+                                          if (lower === 'rss' || lower === 'rss_feeds') return 'rss';
+                                          if (lower === 'linkup') return 'linkup';
+                                          return lower;
+                                        };
+                                        
+                                        return [
+                                          <Badge key={0} variant="outline" className="text-xs">
+                                            {getPlatformLabel(collectionSource)}
+                                          </Badge>
+                                        ];
+                                      }
+                                      
+                                      // Fallback to "Unknown" if no collection_source found
+                                      return [
+                                        <Badge key={0} variant="outline" className="text-xs">
+                                          unknown
+                                        </Badge>
+                                      ];
+                                    })()}
+                                  </div>
                                 </div>
                               )}
                             </div>
                           </div>
-                        </div>
-                        
-                        <div className="mt-4 flex justify-end">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              handleRowSelect(trend.id);
-                            }}
-                            variant={isSelected ? "default" : "outline"}
-                            disabled={disabled}
-                          >
-                            {isSelected ? "Selected" : "Select Topic"}
-                          </Button>
-                        </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+                    
                   </div>
                 );
               })}
@@ -450,13 +780,14 @@ export function TrendSelector({
           )}
 
           {/* Pagination */}
-          {!loading && trends.length > 0 && (
+          {!loading && filteredTrends.length > 0 && (
             <div className="mt-6 pt-4 border-t">
               {renderPagination()}
             </div>
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

@@ -27,11 +27,24 @@ import { useAuth } from "@/components/auth/auth-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { apiClient } from "@/lib/api-client"
 
 interface JobListProps {
   jobs: Job[]
   onAction: (action: string, jobId: string) => void
   highlightJobId?: string | null
+}
+
+// Utility functions for job age and styling
+function getJobAge(job: Job): number {
+  return apiClient.getJobAgeInDays(job)
+}
+
+
+function getAgeLabel(age: number): string {
+  if (age === 0) return 'Today'
+  if (age === 1) return '1 day ago'
+  return `${age} days ago`
 }
 
 function MobileJobCard({ job, onAction, isExpanded, onToggleExpand, isHighlighted, isAdmin }: {
@@ -103,8 +116,13 @@ function MobileJobCard({ job, onAction, isExpanded, onToggleExpand, isHighlighte
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
   }
 
+  const jobAge = getJobAge(job)
+  
   return (
-    <Card className={cn("p-4 cursor-pointer", isHighlighted && "bg-yellow-50 border-yellow-200")} onClick={onToggleExpand}>
+    <Card className={cn(
+      "p-4 cursor-pointer", 
+      isHighlighted && "bg-yellow-50 border-yellow-200"
+    )} onClick={onToggleExpand}>
       <div className="space-y-3">
         {/* Header Row */}
         <div className="flex items-center justify-between">
@@ -113,6 +131,11 @@ function MobileJobCard({ job, onAction, isExpanded, onToggleExpand, isHighlighte
             <Badge variant={getPriorityColor(job.priority) as "default" | "secondary" | "destructive" | "outline"} className="text-xs">
               {job.priority}
             </Badge>
+            {job.status === 'completed' && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                {getAgeLabel(jobAge)}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -235,6 +258,11 @@ function MobileJobCard({ job, onAction, isExpanded, onToggleExpand, isHighlighte
                 {job.completed_at && (
                   <div>Completed: {format(new Date(job.completed_at), "PPpp")}</div>
                 )}
+                {job.status === 'completed' && (
+                  <div className="font-medium text-muted-foreground">
+                    Age: {getAgeLabel(jobAge)} (ready for archiving)
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -353,16 +381,21 @@ export function JobList({ jobs, onAction, highlightJobId }: JobListProps) {
               <TableHead>Priority</TableHead>
               <TableHead>Duration</TableHead>
               <TableHead>Created</TableHead>
+              <TableHead>Age</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {jobs.map((job) => (
+            {jobs.map((job) => {
+              const jobAge = getJobAge(job)
+              
+              return (
               <React.Fragment key={job.id}>
                 <TableRow 
-                  className={`cursor-pointer ${
+                  className={cn(
+                    "cursor-pointer",
                     highlightJobId === job.id ? 'bg-yellow-50 border-yellow-200' : ''
-                  }`}
+                  )}
                   onClick={() => toggleExpand(job.id)}
                 >
                   <TableCell>
@@ -397,6 +430,20 @@ export function JobList({ jobs, onAction, highlightJobId }: JobListProps) {
                     <span className="text-sm text-muted-foreground">
                       {format(new Date(job.created_at), "MMM d, HH:mm")}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    {job.status === 'completed' ? (
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">
+                          {getAgeLabel(jobAge)}
+                        </div>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Archive ready
+                        </Badge>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -489,6 +536,11 @@ export function JobList({ jobs, onAction, highlightJobId }: JobListProps) {
                             {job.completed_at && (
                               <div>Completed: {format(new Date(job.completed_at), "PPpp")}</div>
                             )}
+                            {job.status === 'completed' && (
+                              <div className="font-medium text-muted-foreground">
+                                Age: {getAgeLabel(jobAge)} (ready for archiving)
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -496,7 +548,8 @@ export function JobList({ jobs, onAction, highlightJobId }: JobListProps) {
                   </TableRow>
                 )}
               </React.Fragment>
-            ))}
+            )
+            })}
           </TableBody>
         </Table>
       )}

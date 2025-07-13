@@ -953,7 +953,7 @@ export default function SourcesSettingsPage() {
                               type="checkbox" 
                               checked={enabledSubreddits[subreddit] !== false}
                               onChange={(e) => handleToggleSubreddit(subreddit, e.target.checked)}
-                              className="rounded h-4 w-4" 
+                              className="rounded h-4 w-4 cursor-pointer" 
                             />
                             <span className="text-sm font-medium">r/{subreddit}</span>
                           </div>

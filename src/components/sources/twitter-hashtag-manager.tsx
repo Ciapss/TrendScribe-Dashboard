@@ -612,7 +612,7 @@ export function TwitterHashtagManager() {
                     <div key={hashtag.id} className="flex items-center justify-between p-3 border rounded">
                       <div className="flex items-center gap-2">
                         <input 
-                          className="rounded h-4 w-4" 
+                          className="rounded h-4 w-4 cursor-pointer" 
                           type="checkbox" 
                           checked={hashtag.enabled}
                           onChange={(e) => handleToggleHashtag(hashtag.id, e.target.checked)}

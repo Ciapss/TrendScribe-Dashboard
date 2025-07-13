@@ -257,7 +257,7 @@ export function SourceSelector({
                 .map(([sourceType, enabled]) => (
                 <label key={sourceType} className="flex items-center gap-2 cursor-pointer">
                   <input 
-                    className="rounded h-4 w-4"
+                    className="rounded h-4 w-4 cursor-pointer"
                     type="checkbox"
                     checked={enabled}
                     onChange={(e) => toggleSource(sourceType, e.target.checked)}
@@ -317,7 +317,7 @@ export function SourceSelector({
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <input 
-                        className="rounded h-4 w-4"
+                        className="rounded h-4 w-4 cursor-pointer"
                         type="checkbox" 
                         checked={enabled}
                         onChange={(e) => toggleSource(sourceType, e.target.checked)}

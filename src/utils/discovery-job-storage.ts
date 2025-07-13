@@ -6,7 +6,20 @@ interface DiscoveryJob {
 }
 
 const STORAGE_KEY = 'trendscribe_discovery_jobs'
-const MAX_AGE_MS = 2 * 60 * 60 * 1000 // 2 hours
+const MAX_AGE_HOURS = 2 // 2 hours - appropriate for discovery jobs
+
+// Utility functions consistent with main job age management
+function calculateAgeInHours(startedAt: number): number {
+  const now = Date.now()
+  const diffTime = Math.abs(now - startedAt)
+  return Math.floor(diffTime / (1000 * 60 * 60))
+}
+
+function calculateAgeInDays(startedAt: number): number {
+  const now = Date.now()
+  const diffTime = Math.abs(now - startedAt)
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24))
+}
 
 export class DiscoveryJobStorage {
   static getActiveJobs(): DiscoveryJob[] {
@@ -17,12 +30,13 @@ export class DiscoveryJobStorage {
       if (!stored) return []
       
       const jobs: DiscoveryJob[] = JSON.parse(stored)
-      const now = Date.now()
       
-      // Filter out old jobs (cleanup)
-      const activeJobs = jobs.filter(job => 
-        job.status === 'active' && (now - job.startedAt) < MAX_AGE_MS
-      )
+      // Filter out old jobs using consistent age calculation
+      const activeJobs = jobs.filter(job => {
+        if (job.status !== 'active') return false
+        const ageInHours = calculateAgeInHours(job.startedAt)
+        return ageInHours < MAX_AGE_HOURS
+      })
       
       // Update storage if we filtered out old jobs
       if (activeJobs.length !== jobs.length) {
@@ -34,6 +48,18 @@ export class DiscoveryJobStorage {
       console.error('Failed to parse discovery jobs from localStorage:', error)
       return []
     }
+  }
+
+  static getJobAge(job: DiscoveryJob): { hours: number; days: number } {
+    return {
+      hours: calculateAgeInHours(job.startedAt),
+      days: calculateAgeInDays(job.startedAt)
+    }
+  }
+
+  static isJobExpired(job: DiscoveryJob): boolean {
+    const ageInHours = calculateAgeInHours(job.startedAt)
+    return ageInHours >= MAX_AGE_HOURS
   }
 
   static getActiveJobForIndustry(industry: string): DiscoveryJob | null {
@@ -93,9 +119,16 @@ export class DiscoveryJobStorage {
     if (typeof window === 'undefined') return
     
     const jobs = this.getActiveJobs()
+    const jobsWithAge = jobs.map(job => ({
+      ...job,
+      age: this.getJobAge(job),
+      isExpired: this.isJobExpired(job)
+    }))
+    
     console.log('📋 Discovery Job Storage Debug:', {
       totalJobs: jobs.length,
-      jobs: jobs,
+      maxAgeHours: MAX_AGE_HOURS,
+      jobs: jobsWithAge,
       rawStorage: localStorage.getItem(STORAGE_KEY)
     })
   }

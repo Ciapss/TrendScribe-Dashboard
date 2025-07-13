@@ -181,6 +181,7 @@ export interface Trend {
   selected_for_generation?: boolean;
   selection_timestamp?: string;
   selected_by_user_id?: string;
+  collection_source?: string;
 }
 
 export interface TrendFilters {
@@ -328,4 +329,52 @@ export interface SourceConfiguration {
     enabled_hashtag_ids: string[];
   };
   max_trends_per_source: number;
+}
+
+// Research Caching Types
+export interface ResearchCacheSettings {
+  use_cached_research: boolean;
+  max_research_age_hours: number;
+  force_fresh_research: boolean;
+}
+
+export interface CacheStatusInfo {
+  cache_hit: boolean;
+  cache_age?: number; // hours
+  cache_status?: 'fresh' | 'stale' | 'expired';
+  cost_saved?: number; // USD
+  research_duration?: number; // seconds
+}
+
+export interface CostEstimate {
+  base_estimate: number;
+  with_cache_estimate?: number;
+  potential_savings?: number;
+  cache_hit_probability?: number; // 0-1
+}
+
+// Enhanced blog post generation request
+export interface BlogPostGenerationRequest {
+  language?: string;
+  blog_type?: string;
+  industry?: string;
+  topic?: string;
+  research_depth?: 'moderate' | 'deep';
+  
+  // Research Caching Parameters
+  use_cached_research?: boolean;        // Default: true
+  max_research_age_hours?: number;      // Default: 24, range: 1-168
+  force_fresh_research?: boolean;       // Default: false
+}
+
+// Enhanced workflow metadata to include cache information
+export interface WorkflowMetadata {
+  workflow_id?: string;
+  stage?: string;
+  progress?: number;
+  estimated_time_remaining?: number;
+  cache_hit?: boolean;
+  cache_status?: 'fresh' | 'stale' | 'expired';
+  research_duration?: number;
+  cost_breakdown?: Record<string, number>;
 }

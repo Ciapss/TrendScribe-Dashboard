@@ -10,19 +10,63 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Icons } from '@/components/ui/icons'
 import { useAuth } from './auth-provider'
 
+interface PasswordRequirements {
+  minLength: boolean
+  hasUppercase: boolean
+  hasLowercase: boolean
+  hasNumber: boolean
+}
+
 export function RegisterForm() {
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [emailError, setEmailError] = useState('')
+  const [usernameError, setUsernameError] = useState('')
   const { register } = useAuth()
   const router = useRouter()
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const validateUsername = (username: string) => {
+    const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/
+    return usernameRegex.test(username)
+  }
+
+  const checkPasswordRequirements = (password: string): PasswordRequirements => {
+    return {
+      minLength: password.length >= 8,
+      hasUppercase: /[A-Z]/.test(password),
+      hasLowercase: /[a-z]/.test(password),
+      hasNumber: /\d/.test(password)
+    }
+  }
+
+  const passwordRequirements = checkPasswordRequirements(password)
+  const isPasswordValid = Object.values(passwordRequirements).every(Boolean)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!email || !username || !password || !confirmPassword) {
+    setEmailError('')
+    setUsernameError('')
+    
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address')
+      return
+    }
+    
+    if (!validateUsername(username)) {
+      setUsernameError('Username must be 3-50 characters and contain only letters, numbers, and underscores')
+      return
+    }
+    
+    if (!isPasswordValid) {
       return
     }
 
@@ -35,7 +79,7 @@ export function RegisterForm() {
     try {
       const success = await register(email, username, password)
       if (success) {
-        router.push('/login')
+        router.push('/register/success')
       }
     } finally {
       setIsLoading(false)
@@ -43,7 +87,7 @@ export function RegisterForm() {
   }
 
   const passwordsMatch = password === confirmPassword
-  const isFormValid = email && username && password && confirmPassword && passwordsMatch
+  const isFormValid = validateEmail(email) && validateUsername(username) && isPasswordValid && passwordsMatch
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -66,7 +110,11 @@ export function RegisterForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                className={emailError ? 'border-red-500' : ''}
               />
+              {emailError && (
+                <p className="text-xs text-red-500">{emailError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
@@ -80,7 +128,11 @@ export function RegisterForm() {
                 disabled={isLoading}
                 minLength={3}
                 maxLength={50}
+                className={usernameError ? 'border-red-500' : ''}
               />
+              {usernameError && (
+                <p className="text-xs text-red-500">{usernameError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -93,10 +145,30 @@ export function RegisterForm() {
                 required
                 disabled={isLoading}
                 minLength={8}
+                className={password && !isPasswordValid ? 'border-red-500' : ''}
               />
-              <p className="text-xs text-gray-500">
-                Must be at least 8 characters with uppercase, lowercase, and number
-              </p>
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className={`text-xs ${passwordRequirements.minLength ? 'text-green-600' : 'text-red-500'}`}>
+                    {passwordRequirements.minLength ? '✓' : '✗'} At least 8 characters
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`text-xs ${passwordRequirements.hasUppercase ? 'text-green-600' : 'text-red-500'}`}>
+                    {passwordRequirements.hasUppercase ? '✓' : '✗'} One uppercase letter
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`text-xs ${passwordRequirements.hasLowercase ? 'text-green-600' : 'text-red-500'}`}>
+                    {passwordRequirements.hasLowercase ? '✓' : '✗'} One lowercase letter
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`text-xs ${passwordRequirements.hasNumber ? 'text-green-600' : 'text-red-500'}`}>
+                    {passwordRequirements.hasNumber ? '✓' : '✗'} One number
+                  </span>
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>

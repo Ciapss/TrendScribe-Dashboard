@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { JobList } from "@/components/jobs/job-list"
@@ -59,7 +59,6 @@ export default function JobsPage() {
   //     maxReconnectAttempts: 10
   //   }
   // )
-  const wsConnected = false // Temporarily use polling only
 
   const fetchActiveJobs = useCallback(async () => {
     try {

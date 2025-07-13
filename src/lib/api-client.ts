@@ -23,6 +23,45 @@ class APIClient {
     setInterval(() => this.cleanupCache(), 5 * 60 * 1000)
   }
 
+  // Job age validation utilities
+  private calculateJobAgeInDays(job: Job): number {
+    const now = new Date()
+    const jobDate = new Date(job.completed_at || job.updated_at || job.created_at)
+    const diffTime = Math.abs(now.getTime() - jobDate.getTime())
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  private filterJobsByAge(jobs: Job[], minAgeDays: number): Job[] {
+    return jobs.filter(job => {
+      // Only filter completed jobs for archiving
+      if (job.status !== 'completed') return false
+      return this.calculateJobAgeInDays(job) >= minAgeDays
+    })
+  }
+
+  private validateArchiveRequest(jobs: Job[]): { 
+    valid: boolean
+    eligibleJobs: Job[]
+    message: string 
+  } {
+    const completedJobs = jobs.filter(job => job.status === 'completed')
+
+    if (completedJobs.length === 0) {
+      return {
+        valid: false,
+        eligibleJobs: [],
+        message: 'No completed jobs found'
+      }
+    }
+
+    return {
+      valid: true,
+      eligibleJobs: completedJobs,
+      message: `${completedJobs.length} completed job(s) ready for archiving`
+    }
+  }
+
   setApiKey(apiKey: string) {
     this.apiKey = apiKey
   }
@@ -571,11 +610,67 @@ class APIClient {
     return result
   }
 
-  async archiveCompletedJobs(days: number = 7): Promise<{ success: boolean; message: string }> {
-    const result = await this.request<{ success: boolean; message: string }>(`/jobs/archive?days=${days}`, { method: 'POST' })
-    // Invalidate job-related caches
-    this.invalidateCache('/jobs')
-    return result
+  getJobAgeInDays(job: Job): number {
+    return this.calculateJobAgeInDays(job)
+  }
+
+  async checkArchiveEligibility(): Promise<{
+    valid: boolean
+    eligibleJobsCount: number
+    message: string
+  }> {
+    try {
+      const jobs = await this.getJobs()
+      const validation = this.validateArchiveRequest(jobs)
+      
+      return {
+        valid: validation.valid,
+        eligibleJobsCount: validation.eligibleJobs.length,
+        message: validation.message
+      }
+    } catch (error) {
+      console.error('Failed to check archive eligibility:', error)
+      return {
+        valid: false,
+        eligibleJobsCount: 0,
+        message: 'Failed to check job eligibility'
+      }
+    }
+  }
+
+  async archiveCompletedJobs(): Promise<{ success: boolean; message: string; archivedCount?: number }> {
+    try {
+      // First validate the request
+      const jobs = await this.getJobs()
+      const validation = this.validateArchiveRequest(jobs)
+      
+      if (!validation.valid) {
+        return {
+          success: false,
+          message: validation.message,
+          archivedCount: 0
+        }
+      }
+
+      // Proceed with archiving all completed jobs
+      const result = await this.request<{ success: boolean; message: string; archived_count?: number }>('/jobs/archive', { method: 'POST' })
+      
+      // Invalidate job-related caches
+      this.invalidateCache('/jobs')
+      
+      return {
+        success: result.success,
+        message: result.message,
+        archivedCount: result.archived_count || validation.eligibleJobs.length
+      }
+    } catch (error) {
+      console.error('Failed to archive completed jobs:', error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred during archiving',
+        archivedCount: 0
+      }
+    }
   }
 
   async getArchivedJobs(params?: {
