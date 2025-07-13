@@ -7,6 +7,16 @@ import { JobList } from "@/components/jobs/job-list"
 import { JobStats } from "@/components/jobs/job-stats"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { RefreshCw, Trash2, Archive } from "lucide-react"
 import { apiClient } from "@/lib/api-client"
 import type { Job, JobStats as JobStatsType } from "@/types/job"
@@ -21,17 +31,17 @@ export default function JobsPage() {
   const [stats, setStats] = useState<JobStatsType | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [autoRefresh, setAutoRefresh] = useState(false)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [archiving, setArchiving] = useState(false)
+  const [archiveEligibility, setArchiveEligibility] = useState<{
+    valid: boolean
+    eligibleJobsCount: number
+    message: string
+  } | null>(null)
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false)
   const searchParams = useSearchParams()
   const highlightJobId = searchParams.get('highlight')
   
-  // Smart polling state - reasonable intervals for updates
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const currentIntervalRef = useRef(3000) // Start with 3 seconds for updates
-  const maxIntervalRef = useRef(10000) // Max 10 seconds
-  const hasActiveJobsRef = useRef(false)
 
   // WebSocket for real-time updates - temporarily disabled to prevent connection flood
   // const { isConnected: wsConnected } = useWebSocket(
@@ -69,14 +79,7 @@ export default function JobsPage() {
         console.warn(`Filtered out ${jobsData.length - validJobs.length} jobs without IDs`)
       }
       
-      // Check if there are active jobs (queued or processing)
-      const hasActive = validJobs.some(job => 
-        job.status === "queued" || job.status === "processing"
-      )
-      hasActiveJobsRef.current = hasActive
-      
       setActiveJobs(validJobs)
-      return hasActive
     } catch (error) {
       console.error("Failed to fetch active jobs:", error)
       // During content generation, the server might be temporarily unresponsive
@@ -84,7 +87,6 @@ export default function JobsPage() {
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         console.log("Server temporarily unavailable (likely during content generation), will retry...")
       }
-      return hasActiveJobsRef.current // Return previous state to avoid clearing jobs
     }
   }, [])
 
@@ -116,56 +118,31 @@ export default function JobsPage() {
     }
   }, [])
 
+  const checkArchiveEligibility = useCallback(async () => {
+    try {
+      const eligibility = await apiClient.checkArchiveEligibility()
+      setArchiveEligibility(eligibility)
+    } catch (error) {
+      console.error("Failed to check archive eligibility:", error)
+      setArchiveEligibility({
+        valid: false,
+        eligibleJobsCount: 0,
+        message: "Failed to check eligibility"
+      })
+    }
+  }, [])
+
   const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      const hasActive = await fetchActiveJobs()
-      await Promise.all([fetchArchivedJobs(), fetchStats()])
-      return hasActive
+      await fetchActiveJobs()
+      await Promise.all([fetchArchivedJobs(), fetchStats(), checkArchiveEligibility()])
     } finally {
       setRefreshing(false)
     }
-  }, [fetchActiveJobs, fetchArchivedJobs, fetchStats])
+  }, [fetchActiveJobs, fetchArchivedJobs, fetchStats, checkArchiveEligibility])
 
 
-  // Smart polling function with exponential backoff
-  const startSmartPolling = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      clearTimeout(pollingIntervalRef.current)
-    }
-
-    const poll = async () => {
-      if (!autoRefresh) return
-
-      const hasActive = await refresh()
-      
-      // Adjust interval based on activity
-      if (hasActive) {
-        // Reset to 3-second polling when there are active jobs
-        currentIntervalRef.current = 3000 // 3 seconds for active jobs
-      } else {
-        // Exponential backoff when no active jobs
-        currentIntervalRef.current = Math.min(
-          currentIntervalRef.current * 1.5,
-          maxIntervalRef.current
-        )
-      }
-
-      // Schedule next poll
-      pollingIntervalRef.current = setTimeout(poll, currentIntervalRef.current)
-    }
-
-    // Start polling
-    poll()
-  }, [autoRefresh, refresh])
-
-  // Stop polling
-  const stopPolling = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      clearTimeout(pollingIntervalRef.current)
-      pollingIntervalRef.current = null
-    }
-  }, [])
 
   useEffect(() => {
     const initialFetch = async () => {
@@ -175,17 +152,22 @@ export default function JobsPage() {
     }
     
     initialFetch()
+
+    // Auto-refresh every 15 seconds
+    const interval = setInterval(() => {
+      refresh()
+    }, 15000)
+
+    return () => clearInterval(interval)
   }, [refresh])
 
+  // Check archive eligibility when jobs change
   useEffect(() => {
-    if (autoRefresh) {
-      startSmartPolling()
-    } else {
-      stopPolling()
+    if (!loading) {
+      checkArchiveEligibility()
     }
+  }, [checkArchiveEligibility, loading])
 
-    return () => stopPolling()
-  }, [autoRefresh, startSmartPolling, stopPolling])
 
   const handleJobAction = async (action: string, jobId: string) => {
     try {
@@ -196,14 +178,7 @@ export default function JobsPage() {
         await apiClient.retryJob(jobId)
         toast.success("Job queued for retry")
       }
-      // Reset polling interval and refresh immediately after action
-      currentIntervalRef.current = 3000
       await refresh()
-      
-      // Restart smart polling if auto-refresh is enabled
-      if (autoRefresh) {
-        startSmartPolling()
-      }
     } catch (error) {
       console.error(`Failed to ${action} job:`, error)
       toast.error(`Failed to ${action} job`)
@@ -228,15 +203,32 @@ export default function JobsPage() {
   const handleArchiveCompleted = async () => {
     setArchiving(true)
     try {
-      const result = await apiClient.archiveCompletedJobs(7) // Archive jobs older than 7 days
-      toast.success(result.message)
-      // Refresh the job list after archival
-      await refresh()
+      const result = await apiClient.archiveCompletedJobs()
+      
+      if (result.success) {
+        const countMessage = result.archivedCount && result.archivedCount > 0 
+          ? ` (${result.archivedCount} job${result.archivedCount === 1 ? '' : 's'} archived)`
+          : ''
+        toast.success(`${result.message}${countMessage}`)
+        // Refresh the job list after archival
+        await refresh()
+      } else {
+        toast.error(result.message || "Failed to archive jobs")
+      }
     } catch (error) {
       console.error("Failed to archive completed jobs:", error)
-      toast.error("Archive feature not available yet - please restart the server")
+      toast.error("Archive feature not available - please check server connection")
     } finally {
       setArchiving(false)
+      setShowArchiveDialog(false)
+    }
+  }
+
+  const handleArchiveClick = () => {
+    if (archiveEligibility?.valid) {
+      setShowArchiveDialog(true)
+    } else {
+      toast.error(archiveEligibility?.message || "No jobs eligible for archiving")
     }
   }
 
@@ -265,26 +257,6 @@ export default function JobsPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="cursor-pointer text-sm text-muted-foreground">Auto-refresh</label>
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="cursor-pointer rounded"
-            />
-            {autoRefresh && (
-              <span className="text-xs text-muted-foreground">
-                ({hasActiveJobsRef.current ? "3s" : `${Math.round(currentIntervalRef.current / 1000)}s`})
-              </span>
-            )}
-            <div className="flex items-center gap-1 text-xs">
-              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-muted-foreground">
-                {wsConnected ? 'Live' : 'Polling'}
-              </span>
-            </div>
-          </div>
           {hasCancelledJobs && (
             <Button
               variant="outline"
@@ -301,12 +273,12 @@ export default function JobsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleArchiveCompleted}
-              disabled={archiving}
-              className="text-blue-600 hover:text-blue-700"
+              onClick={handleArchiveClick}
+              disabled={archiving || !archiveEligibility?.valid}
+              className="text-blue-600 hover:text-blue-700 disabled:text-muted-foreground"
             >
               <Archive className={`h-4 w-4 mr-2 ${archiving ? 'animate-pulse' : ''}`} />
-              Archive Completed
+              Archive{archiveEligibility?.eligibleJobsCount ? ` (${archiveEligibility.eligibleJobsCount})` : ''}
             </Button>
           )}
           <Button
@@ -376,6 +348,32 @@ export default function JobsPage() {
       </Tabs>
       </FadeIn>
       </div>
+
+      {/* Archive Confirmation Dialog */}
+      <AlertDialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Completed Jobs</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to archive {archiveEligibility?.eligibleJobsCount} completed job
+              {archiveEligibility?.eligibleJobsCount === 1 ? '' : 's'}?
+              <br />
+              <br />
+              Archived jobs will be moved to the archived section and can still be viewed but cannot be modified.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleArchiveCompleted}
+              disabled={archiving}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {archiving ? 'Archiving...' : 'Archive Jobs'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </RouteGuard>
   )
 }

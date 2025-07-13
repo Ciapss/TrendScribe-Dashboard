@@ -109,11 +109,11 @@ export function CostAnalytics() {
     fetchCostData()
     fetchMonthlyCostData()
     
-    // Auto-refresh every 60 seconds
+    // Auto-refresh every 15 seconds
     const interval = setInterval(() => {
       fetchCostData()
       fetchMonthlyCostData()
-    }, 60000)
+    }, 15000)
     return () => clearInterval(interval)
   }, [])
 
