@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-;
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrendFilters } from "./trend-filters";
 import type { Trend, TrendFilters as TrendFiltersType } from "@/types";
 import { ChevronDown, ChevronRight, ChevronLeft, Search, X } from "lucide-react";
@@ -59,6 +59,39 @@ export function TrendSelector({
     () => [...new Set(trends.map(trend => trend.status))].sort(),
     [trends]
   );
+
+  // Extract unique source types and map them to user-friendly labels
+  const sourceTypes = useMemo(() => {
+    const sources = [...new Set(trends.map(trend => trend.collection_source?.toLowerCase()).filter(Boolean))] as string[];
+    
+    const sourceMap = sources.map(source => {
+      if (source === 'twitter' || source === 'x') return { value: 'hashtag', label: 'Hashtag', count: 0 };
+      if (source === 'reddit') return { value: 'reddit', label: 'Reddit', count: 0 };
+      if (source === 'rss' || source === 'rss_feeds') return { value: 'rss', label: 'RSS', count: 0 };
+      if (source === 'linkup') return { value: 'linkup', label: 'LinkUp', count: 0 };
+      return { value: source, label: source.charAt(0).toUpperCase() + source.slice(1), count: 0 };
+    });
+    
+    // Remove duplicates and count occurrences
+    const uniqueSources = sourceMap.reduce((acc, source) => {
+      const existing = acc.find(s => s.value === source.value);
+      if (existing) {
+        existing.count++;
+      } else {
+        source.count = trends.filter(trend => {
+          const collectionSource = trend.collection_source?.toLowerCase();
+          if (source.value === 'hashtag') {
+            return collectionSource === 'twitter' || collectionSource === 'x';
+          }
+          return collectionSource === source.value;
+        }).length;
+        acc.push(source);
+      }
+      return acc;
+    }, [] as Array<{ value: string; label: string; count: number }>);
+    
+    return uniqueSources.sort((a, b) => b.count - a.count);
+  }, [trends]);
 
   const handleTrendSelect = useCallback((trendId: string) => {
     // Only allow selecting one trend at a time
@@ -117,10 +150,24 @@ export function TrendSelector({
     return { totalMentions, avgEngagement: normalizedEngagement };
   }, []);
 
-  // Filter trends based on search term - whole word matching
+  // Filter trends based on search term and source - whole word matching
   const filteredTrends = useMemo(() => {
+    let filtered = trends;
+    
+    // Filter by source first
+    if (filters.source && filters.source !== 'all') {
+      filtered = filtered.filter(trend => {
+        const collectionSource = trend.collection_source?.toLowerCase();
+        if (filters.source === 'hashtag') {
+          return collectionSource === 'twitter' || collectionSource === 'x';
+        }
+        return collectionSource === filters.source;
+      });
+    }
+    
+    // Then filter by search term
     if (!filters.search || !filters.search.trim()) {
-      return trends;
+      return filtered;
     }
     
     const searchTerm = filters.search.toLowerCase().trim();
@@ -133,7 +180,7 @@ export function TrendSelector({
     
     const wordRegex = createWordRegex(searchTerm);
     
-    return trends.filter(trend => {
+    return filtered.filter(trend => {
       // Search in topic title (whole words)
       if (wordRegex.test(trend.topic)) {
         return true;
@@ -153,7 +200,7 @@ export function TrendSelector({
       
       return false;
     });
-  }, [trends, filters.search]);
+  }, [trends, filters.search, filters.source]);
 
   // Helper function to highlight search terms - whole word matching
   const highlightSearchTerm = useCallback((text: string, searchTerm: string) => {
@@ -356,42 +403,61 @@ export function TrendSelector({
 
       {/* Right Column: Trending Topics Table */}
       <div className="lg:col-span-1">
-        {/* Trending Topics Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              Trending Topics
-              {!loading && (
-                <Badge variant="secondary">
-                  {filters.search ? 
-                    `${filteredTrends.length} of ${totalCount}` : 
-                    `${totalCount} total`
-                  }
-                </Badge>
-              )}
-            </CardTitle>
-          </div>
+        {/* Trending Topics Table with Source Filter Tabs */}
+        <Tabs 
+          value={filters.source || 'all'} 
+          onValueChange={(value) => onFiltersChange({ ...filters, source: value === 'all' ? undefined : value })}
+          className="w-full"
+        >
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  Trending Topics
+                  {!loading && (
+                    <Badge variant="secondary">
+                      {filters.search ? 
+                        `${filteredTrends.length} of ${totalCount}` : 
+                        `${totalCount} total`
+                      }
+                    </Badge>
+                  )}
+                </CardTitle>
+              </div>
 
-          {/* Selection Info */}
-          {selectedTrendIds.length > 0 && (
-            <div className="flex items-center gap-2 pt-2">
-              <Badge variant="default" className="gap-1">
-                1 topic selected
-              </Badge>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onTrendSelection([])}
-                className="h-6 text-xs"
-                disabled={disabled}
-              >
-                Clear selection
-              </Button>
-            </div>
-          )}
-        </CardHeader>
+              {/* Source Filter Tabs */}
+              {filters.industry && totalCount > 0 && (
+                <TabsList className="grid w-full mt-4" style={{ gridTemplateColumns: `repeat(${sourceTypes.length + 1}, minmax(0, 1fr))` }}>
+                  <TabsTrigger value="all" className="text-xs sm:text-sm">
+                    All ({totalCount})
+                  </TabsTrigger>
+                  {sourceTypes.map(source => (
+                    <TabsTrigger key={source.value} value={source.value} className="text-xs sm:text-sm">
+                      {source.label} ({source.count})
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              )}
+
+              {/* Selection Info */}
+              {selectedTrendIds.length > 0 && (
+                <div className="flex items-center gap-2 pt-2">
+                  <Badge variant="default" className="gap-1">
+                    1 topic selected
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onTrendSelection([])}
+                    className="h-6 text-xs"
+                    disabled={disabled}
+                  >
+                    Clear selection
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
 
         <CardContent>
           {loading ? (
@@ -786,7 +852,8 @@ export function TrendSelector({
             </div>
           )}
         </CardContent>
-      </Card>
+          </Card>
+        </Tabs>
       </div>
     </div>
   );

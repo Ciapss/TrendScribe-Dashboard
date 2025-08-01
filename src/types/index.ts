@@ -192,6 +192,7 @@ export interface TrendFilters {
   search?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+  source?: string;
 }
 
 export interface TrendSelectionRequest {
