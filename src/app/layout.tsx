@@ -3,10 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/components/auth/auth-provider"
-import { RouteGuard } from "@/components/auth/route-guard"
 import { AuthenticatedLayout } from "@/components/auth/authenticated-layout"
-import { JobProvider } from "@/contexts/JobContext"
-import { DataProvider } from "@/contexts/DataContext"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,15 +23,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.className} antialiased`}>
         <AuthProvider>
-          <RouteGuard>
-            <JobProvider>
-              <DataProvider>
-                <AuthenticatedLayout>
-                  {children}
-                </AuthenticatedLayout>
-              </DataProvider>
-            </JobProvider>
-          </RouteGuard>
+          <AuthenticatedLayout>
+            {children}
+          </AuthenticatedLayout>
         </AuthProvider>
         <Toaster />
       </body>

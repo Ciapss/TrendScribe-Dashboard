@@ -19,7 +19,9 @@ export function LoginForm() {
   const searchParams = useSearchParams()
   
   // Get redirect URL from query params
-  const redirectUrl = searchParams.get('redirect') || '/'
+  const redirectParam = searchParams.get('redirect')
+  // Prevent redirect loop by checking if redirect is to login page
+  const redirectUrl = redirectParam && redirectParam !== '/login' ? redirectParam : '/'
   const wasRedirected = searchParams.has('redirect')
 
   const handleSubmit = async (e: React.FormEvent) => {

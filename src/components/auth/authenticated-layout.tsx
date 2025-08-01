@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { PageTransition } from "@/components/ui/page-transition"
+import { JobProvider } from "@/contexts/JobContext"
+import { DataProvider } from "@/contexts/DataContext"
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode
@@ -31,22 +33,26 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
 
   if (showSidebar) {
     return (
-      <SidebarProvider>
-        <AppSidebar />
-        <main className="flex-1 overflow-hidden">
-          <div className="flex h-full flex-col">
-            <header className="flex h-14 sm:h-16 items-center gap-2 sm:gap-4 border-b bg-muted/40 px-3 sm:px-6">
-              <SidebarTrigger className="cursor-pointer -ml-1 sm:-ml-3 min-w-[44px] min-h-[44px] sm:min-w-auto sm:min-h-auto" />
-              <h1 className="text-base sm:text-lg font-semibold truncate">TrendScribe Dashboard</h1>
-            </header>
-            <div className="flex-1 overflow-auto p-3 sm:p-6">
-              <PageTransition>
-                {children}
-              </PageTransition>
-            </div>
-          </div>
-        </main>
-      </SidebarProvider>
+      <JobProvider>
+        <DataProvider>
+          <SidebarProvider>
+            <AppSidebar />
+            <main className="flex-1 overflow-hidden">
+              <div className="flex h-full flex-col">
+                <header className="flex h-14 sm:h-16 items-center gap-2 sm:gap-4 border-b bg-muted/40 px-3 sm:px-6">
+                  <SidebarTrigger className="cursor-pointer -ml-1 sm:-ml-3 min-w-[44px] min-h-[44px] sm:min-w-auto sm:min-h-auto" />
+                  <h1 className="text-base sm:text-lg font-semibold truncate">TrendScribe Dashboard</h1>
+                </header>
+                <div className="flex-1 overflow-auto p-3 sm:p-6">
+                  <PageTransition>
+                    {children}
+                  </PageTransition>
+                </div>
+              </div>
+            </main>
+          </SidebarProvider>
+        </DataProvider>
+      </JobProvider>
     )
   }
 

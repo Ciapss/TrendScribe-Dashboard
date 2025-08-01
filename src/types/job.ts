@@ -17,6 +17,7 @@ export interface Job {
   completed_at?: Date;
   created_at: Date;
   updated_at: Date;
+  archived_at?: Date;
   
   // Results
   result?: Record<string, unknown>;

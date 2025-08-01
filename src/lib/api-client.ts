@@ -65,44 +65,6 @@ class APIClient {
     }
   }
 
-  // Job age validation utilities
-  private calculateJobAgeInDays(job: Job): number {
-    const now = new Date()
-    const jobDate = new Date(job.completed_at || job.updated_at || job.created_at)
-    const diffTime = Math.abs(now.getTime() - jobDate.getTime())
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays
-  }
-
-  private filterJobsByAge(jobs: Job[], minAgeDays: number): Job[] {
-    return jobs.filter(job => {
-      // Only filter completed jobs for archiving
-      if (job.status !== 'completed') return false
-      return this.calculateJobAgeInDays(job) >= minAgeDays
-    })
-  }
-
-  private validateArchiveRequest(jobs: Job[]): { 
-    valid: boolean
-    eligibleJobs: Job[]
-    message: string 
-  } {
-    const completedJobs = jobs.filter(job => job.status === 'completed')
-
-    if (completedJobs.length === 0) {
-      return {
-        valid: false,
-        eligibleJobs: [],
-        message: 'No completed jobs found'
-      }
-    }
-
-    return {
-      valid: true,
-      eligibleJobs: completedJobs,
-      message: `${completedJobs.length} completed job(s) ready for archiving`
-    }
-  }
 
   setApiKey(apiKey: string) {
     this.apiKey = apiKey
@@ -979,17 +941,8 @@ class APIClient {
     jobType?: string
     limit?: number
     skip?: number
-    includeArchived?: boolean
   }): Promise<Job[]> {
     const queryParams = new URLSearchParams()
-    
-    // Add include_archived parameter to control whether archived jobs are included
-    if (params?.includeArchived !== undefined) {
-      queryParams.append('include_archived', params.includeArchived.toString())
-    } else {
-      // Default to excluding archived jobs unless explicitly requested
-      queryParams.append('include_archived', 'false')
-    }
     
     if (params?.status) queryParams.append('status', params.status)
     if (params?.jobType) queryParams.append('job_type', params.jobType)
@@ -999,22 +952,11 @@ class APIClient {
     const query = queryParams.toString()
     const url = query ? `/jobs?${query}` : '/jobs'
     
-    // Skip cache entirely for active jobs or when fetching all jobs (which might include active ones)
-    const hasActiveStatus = params?.status === 'processing' || params?.status === 'queued'
-    const fetchingAllJobs = !params?.status // No status filter = fetching all jobs which might include active ones
-    const shouldSkipCache = hasActiveStatus || fetchingAllJobs
-    
-    const cacheOptions = shouldSkipCache 
-      ? { skipCache: true } 
-      : { skipCache: true } // Always skip cache for real-time updates
-    
-    
-    const response = await this.request<Job[]>(url, {}, cacheOptions)
-    
+    const response = await this.request<Job[]>(url, {}, { skipCache: true })
     
     // Transform _id to id for each job
     const transformedJobs = response.map(job => {
-      const jobWithId = job as Job & { _id?: string; archived?: boolean }
+      const jobWithId = job as Job & { _id?: string }
       return {
         ...job,
         id: jobWithId._id || job.id,
@@ -1024,7 +966,43 @@ class APIClient {
         queued_at: job.queued_at ? new Date(job.queued_at) : new Date(),
         started_at: job.started_at ? new Date(job.started_at) : undefined,
         completed_at: job.completed_at ? new Date(job.completed_at) : undefined,
-        archived: jobWithId.archived || false, // Ensure archived field exists
+      }
+    })
+    
+    return transformedJobs
+  }
+
+  async getArchivedJobs(params?: {
+    status?: string
+    jobType?: string
+    limit?: number
+    skip?: number
+  }): Promise<Job[]> {
+    const queryParams = new URLSearchParams()
+    
+    if (params?.status) queryParams.append('status', params.status)
+    if (params?.jobType) queryParams.append('job_type', params.jobType)
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.skip) queryParams.append('skip', params.skip.toString())
+    
+    const query = queryParams.toString()
+    const url = query ? `/jobs/archived?${query}` : '/jobs/archived'
+    
+    const response = await this.request<Job[]>(url, {}, { skipCache: true })
+    
+    // Transform _id to id for each job
+    const transformedJobs = response.map(job => {
+      const jobWithId = job as Job & { _id?: string }
+      return {
+        ...job,
+        id: jobWithId._id || job.id,
+        // Convert date strings to Date objects - handle ISO strings with timezone properly
+        created_at: job.created_at ? new Date(job.created_at) : new Date(),
+        updated_at: job.updated_at ? new Date(job.updated_at) : new Date(),
+        queued_at: job.queued_at ? new Date(job.queued_at) : new Date(),
+        started_at: job.started_at ? new Date(job.started_at) : undefined,
+        completed_at: job.completed_at ? new Date(job.completed_at) : undefined,
+        archived_at: job.archived_at ? new Date(job.archived_at) : undefined,
       }
     })
     
@@ -1077,69 +1055,19 @@ class APIClient {
     return result
   }
 
-  getJobAgeInDays(job: Job): number {
-    return this.calculateJobAgeInDays(job)
-  }
-
-  async checkArchiveEligibility(): Promise<{
-    valid: boolean
-    eligibleJobsCount: number
-    message: string
-  }> {
-    try {
-      const jobs = await this.getJobs({ includeArchived: false })
-      const validation = this.validateArchiveRequest(jobs)
-      
-      return {
-        valid: validation.valid,
-        eligibleJobsCount: validation.eligibleJobs.length,
-        message: validation.message
-      }
-    } catch (error) {
-      console.error('Failed to check archive eligibility:', error)
-      return {
-        valid: false,
-        eligibleJobsCount: 0,
-        message: 'Failed to check job eligibility'
-      }
-    }
-  }
 
   async archiveCompletedJobs(): Promise<{ success: boolean; message: string; archivedCount?: number }> {
     try {
-      // First validate the request - get only non-archived jobs for validation
-      console.log('🔍 Getting active jobs for archive validation...')
-      const jobs = await this.getJobs({ includeArchived: false })
-      console.log('🔍 Active jobs for validation:', jobs.map(j => ({ id: j.id, status: j.status, archived: (j as { archived?: boolean }).archived })))
-      const validation = this.validateArchiveRequest(jobs)
-      console.log('🔍 Archive validation result:', validation)
-      
-      if (!validation.valid) {
-        return {
-          success: false,
-          message: validation.message,
-          archivedCount: 0
-        }
-      }
-
-      // Proceed with archiving all completed jobs
-      console.log('🗃️ Making archive request to backend...')
       const result = await this.request<{ success: boolean; message: string; archived_count?: number }>('/jobs/archive', { method: 'POST' })
-      console.log('🗃️ Backend archive response:', result)
-      
-      // Debug: Log what's happening with the archive
-      if (result.success) {
-        console.log('⚠️ Archive appears successful, but backend may not be setting archived flag on jobs')
-      }
       
       // Invalidate job-related caches
-      console.log('🗑️ Invalidating job caches after archive...')
       this.invalidateCache('/jobs')
+      this.invalidateCache('/jobs/archived')
       
       return {
         success: result.success,
         message: result.message,
-        archivedCount: result.archived_count || validation.eligibleJobs.length
+        archivedCount: result.archived_count
       }
     } catch (error) {
       console.error('Failed to archive completed jobs:', error)

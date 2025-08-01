@@ -27,7 +27,6 @@ import { useAuth } from "@/components/auth/auth-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { apiClient } from "@/lib/api-client"
 
 interface JobListProps {
   jobs: Job[]
@@ -38,7 +37,11 @@ interface JobListProps {
 
 // Utility functions for job age and styling
 function getJobAge(job: Job): number {
-  return apiClient.getJobAgeInDays(job)
+  const now = new Date()
+  const jobDate = new Date(job.completed_at || job.updated_at || job.created_at)
+  const diffTime = Math.abs(now.getTime() - jobDate.getTime())
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+  return diffDays
 }
 
 

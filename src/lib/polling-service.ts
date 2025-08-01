@@ -128,7 +128,7 @@ class PollingService {
           case 'jobs':
             dataPromise = (async () => {
               try {
-                const jobsData = await apiClient.getJobs({ includeArchived: false }); // Fetch only active jobs
+                const jobsData = await apiClient.getJobs(); // Fetch only active jobs
                 // Temporary debug: Check if we're getting jobs that should be archived
                 if (jobsData && jobsData.length > 0) {
                   const completedJobs = jobsData.filter(j => j.status === 'completed');
@@ -189,20 +189,6 @@ class PollingService {
                 if (error instanceof Error && error.message.includes('403')) {
                   console.warn('⚠️ Job stats not available (insufficient permissions)');
                   return { processing: 0, completed: 0, failed: 0, cancelled: 0, total: 0 };
-                } else {
-                  throw error;
-                }
-              }
-            })();
-            break;
-          case 'archive-eligibility':
-            dataPromise = (async () => {
-              try {
-                return await apiClient.checkArchiveEligibility();
-              } catch (error) {
-                if (error instanceof Error && error.message.includes('403')) {
-                  console.warn('⚠️ Archive features not available (insufficient permissions)');
-                  return { valid: false, eligibleJobsCount: 0, message: 'Archive feature not available' };
                 } else {
                   throw error;
                 }
@@ -326,7 +312,7 @@ class PollingService {
           
           switch (subscription.endpoint) {
             case 'jobs':
-              data = await apiClient.getJobs({ includeArchived: false }); // Fetch only active jobs
+              data = await apiClient.getJobs(); // Fetch only active jobs
               break;
             case 'dashboard-stats':
               data = await apiClient.getDashboardStats();
@@ -336,9 +322,6 @@ class PollingService {
               break;
             case 'job-stats':
               data = await apiClient.getJobStats();
-              break;
-            case 'archive-eligibility':
-              data = await apiClient.checkArchiveEligibility();
               break;
             case 'recent-posts':
               data = await apiClient.getPosts({ limit: 5, sort: 'date-desc' });

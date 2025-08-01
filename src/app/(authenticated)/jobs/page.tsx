@@ -44,9 +44,8 @@ export default function JobsPage() {
   // Function to fetch archived jobs
   const fetchArchivedJobs = useCallback(async () => {
     try {
-      const allJobs = await apiClient.getJobs({ includeArchived: true })
-      const filteredArchived = allJobs.filter(job => (job as { archived?: boolean }).archived)
-      setArchivedJobs(filteredArchived)
+      const archivedJobsData = await apiClient.getArchivedJobs({ limit: 50 })
+      setArchivedJobs(archivedJobsData)
     } catch (error) {
       console.error('❌ Failed to fetch archived jobs:', error)
     }
@@ -57,7 +56,7 @@ export default function JobsPage() {
     fetchArchivedJobs()
   }, [fetchArchivedJobs])
 
-  // Active jobs are the jobs from the polling service (already filtered to active only)
+  // Active jobs are the jobs from the polling service (backend now handles filtering)
   const activeJobs = jobs
   
 
@@ -102,33 +101,13 @@ export default function JobsPage() {
   }
 
   const handleArchiveCompleted = async () => {
-    /**
-     * BACKEND REQUIREMENTS FOR ARCHIVE FEATURE:
-     * 
-     * The backend needs to implement the following for archiving to work properly:
-     * 1. Add an "archived" boolean field to the job model
-     * 2. When POST /jobs/archive is called, set archived=true on completed jobs (don't delete them)
-     * 3. When GET /jobs?include_archived=false is called, filter out jobs where archived=true
-     * 4. When GET /jobs?include_archived=true is called, return all jobs including archived ones
-     * 
-     * Currently, the backend returns success but doesn't actually set an archived flag,
-     * so archived jobs still appear in the active jobs list.
-     */
     setArchiving(true)
     try {
       const result = await apiClient.archiveCompletedJobs()
       
       if (result.success) {
-        const countMessage = result.archivedCount && result.archivedCount > 0 
-          ? ` (${result.archivedCount} job${result.archivedCount === 1 ? '' : 's'} archived)`
-          : ''
+        const countMessage = result.archivedCount ? ` (${result.archivedCount} job${result.archivedCount === 1 ? '' : 's'} archived)` : ''
         toast.success(`${result.message}${countMessage}`)
-        
-        // Force cache invalidation before refresh
-        apiClient.invalidateCache('/jobs')
-        
-        // Add small delay to ensure backend has completed archive operation
-        await new Promise(resolve => setTimeout(resolve, 500))
         
         // Trigger immediate refresh
         pollingService.triggerManualRefresh()
@@ -136,11 +115,11 @@ export default function JobsPage() {
         // Also refresh archived jobs to show newly archived items
         await fetchArchivedJobs()
       } else {
-        toast.error(result.message || "Failed to archive jobs")
+        toast.error(result.message)
       }
     } catch (error) {
       console.error("Failed to archive completed jobs:", error)
-      toast.error("Archive feature not available - please check server connection")
+      toast.error("Failed to archive jobs")
     } finally {
       setArchiving(false)
       setShowArchiveDialog(false)
