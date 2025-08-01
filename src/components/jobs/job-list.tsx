@@ -33,6 +33,7 @@ interface JobListProps {
   jobs: Job[]
   onAction: (action: string, jobId: string) => void
   highlightJobId?: string | null
+  tabType?: 'active' | 'archived'
 }
 
 // Utility functions for job age and styling
@@ -272,7 +273,7 @@ function MobileJobCard({ job, onAction, isExpanded, onToggleExpand, isHighlighte
   )
 }
 
-export function JobList({ jobs, onAction, highlightJobId }: JobListProps) {
+export function JobList({ jobs, onAction, highlightJobId, tabType = 'active' }: JobListProps) {
   const { user } = useAuth()
   const isMobile = useIsMobile()
   const isAdmin = user?.role === 'admin'
@@ -360,7 +361,7 @@ export function JobList({ jobs, onAction, highlightJobId }: JobListProps) {
         <div className="space-y-3">
           {jobs.map((job) => (
             <MobileJobCard
-              key={job.id}
+              key={`${tabType}-${job.id}`}
               job={job}
               onAction={onAction}
               isExpanded={expandedJobs.has(job.id)}
@@ -390,7 +391,7 @@ export function JobList({ jobs, onAction, highlightJobId }: JobListProps) {
               const jobAge = getJobAge(job)
               
               return (
-              <React.Fragment key={job.id}>
+              <React.Fragment key={`${tabType}-${job.id}`}>
                 <TableRow 
                   className={cn(
                     "cursor-pointer",

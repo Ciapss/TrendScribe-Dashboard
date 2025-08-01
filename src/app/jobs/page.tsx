@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
+import { useJobs } from "@/contexts/JobContext"
+import { useGlobalJobPolling } from "@/hooks/useGlobalJobPolling"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { JobList } from "@/components/jobs/job-list"
 import { JobStats } from "@/components/jobs/job-stats"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,155 +20,51 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { RefreshCw, Trash2, Archive } from "lucide-react"
+import { Trash2, Archive } from "lucide-react"
 import { apiClient } from "@/lib/api-client"
-import type { Job, JobStats as JobStatsType } from "@/types/job"
+import type { JobStats as JobStatsType, Job } from "@/types/job"
 import { toast } from "sonner"
 import { FadeIn } from "@/components/ui/page-transition"
 import { RouteGuard } from "@/components/auth/route-guard"
-// import { useWebSocket } from "@/hooks/useWebSocket" // Temporarily disabled
+import { pollingService } from "@/lib/polling-service"
 
 export default function JobsPage() {
-  const [activeJobs, setActiveJobs] = useState<Job[]>([])
+  const { state: { jobs, error, loading, initialLoaded } } = useJobs()
+  useGlobalJobPolling() // Start global polling
+  
+  // State for archived jobs (fetched separately)
   const [archivedJobs, setArchivedJobs] = useState<Job[]>([])
-  const [stats, setStats] = useState<JobStatsType | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  
   const [cleaningUp, setCleaningUp] = useState(false)
   const [archiving, setArchiving] = useState(false)
-  const [archiveEligibility, setArchiveEligibility] = useState<{
-    valid: boolean
-    eligibleJobsCount: number
-    message: string
-  } | null>(null)
   const [showArchiveDialog, setShowArchiveDialog] = useState(false)
   const searchParams = useSearchParams()
   const highlightJobId = searchParams.get('highlight')
   
-
-  // WebSocket for real-time updates - temporarily disabled to prevent connection flood
-  // const { isConnected: wsConnected } = useWebSocket(
-  //   `ws://${process.env.NEXT_PUBLIC_API_URL?.replace('https://', '').replace('http://', '').replace('/api/v1', '') || 'localhost:8000'}/api/v1/ws/jobs`,
-  //   {
-  //     onMessage: (message) => {
-  //       console.log('🔔 WebSocket job update:', message)
-  //       
-  //       if (message.type === 'progress_update' || message.type === 'job_completed' || message.type === 'job_failed') {
-  //         // Immediately refresh jobs when we get a WebSocket update
-  //         refresh()
-  //       }
-  //     },
-  //     reconnectInterval: 2000,
-  //     maxReconnectAttempts: 10
-  //   }
-  // )
-
-  const fetchActiveJobs = useCallback(async () => {
-    try {
-      const jobsData = await apiClient.getJobs()
-      console.log("Fetched active jobs data:", jobsData)
-      
-      // Validate job data
-      const validJobs = jobsData.filter(job => {
-        if (!job.id) {
-          console.warn("Job missing ID:", job)
-          return false
-        }
-        return true
-      })
-      
-      if (validJobs.length !== jobsData.length) {
-        console.warn(`Filtered out ${jobsData.length - validJobs.length} jobs without IDs`)
-      }
-      
-      setActiveJobs(validJobs)
-    } catch (error) {
-      console.error("Failed to fetch active jobs:", error)
-      // During content generation, the server might be temporarily unresponsive
-      // Don't clear the jobs list, just log the error and retry later
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        console.log("Server temporarily unavailable (likely during content generation), will retry...")
-      }
-    }
-  }, [])
-
+  // Function to fetch archived jobs
   const fetchArchivedJobs = useCallback(async () => {
     try {
-      const archivedData = await apiClient.getArchivedJobs()
-      console.log("Fetched archived jobs data:", archivedData)
-      setArchivedJobs(archivedData)
+      const allJobs = await apiClient.getJobs({ includeArchived: true })
+      const filteredArchived = allJobs.filter(job => (job as { archived?: boolean }).archived)
+      setArchivedJobs(filteredArchived)
     } catch (error) {
-      console.error("Failed to fetch archived jobs:", error)
-      // During content generation, server might be unresponsive - don't clear existing data
-      if (!(error instanceof TypeError && error.message.includes('Failed to fetch'))) {
-        setArchivedJobs([])
-      }
+      console.error('❌ Failed to fetch archived jobs:', error)
     }
   }, [])
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const statsData = await apiClient.getJobStats()
-      setStats(statsData)
-    } catch (error) {
-      console.error("Failed to fetch job stats:", error)
-      // During content generation, server might be unresponsive - keep existing stats
-      if (!(error instanceof TypeError && error.message.includes('Failed to fetch'))) {
-        // Only clear stats for non-connection errors
-        setStats(null)
-      }
-    }
-  }, [])
-
-  const checkArchiveEligibility = useCallback(async () => {
-    try {
-      const eligibility = await apiClient.checkArchiveEligibility()
-      setArchiveEligibility(eligibility)
-    } catch (error) {
-      console.error("Failed to check archive eligibility:", error)
-      setArchiveEligibility({
-        valid: false,
-        eligibleJobsCount: 0,
-        message: "Failed to check eligibility"
-      })
-    }
-  }, [])
-
-  const refresh = useCallback(async () => {
-    setRefreshing(true)
-    try {
-      await fetchActiveJobs()
-      await Promise.all([fetchArchivedJobs(), fetchStats(), checkArchiveEligibility()])
-    } finally {
-      setRefreshing(false)
-    }
-  }, [fetchActiveJobs, fetchArchivedJobs, fetchStats, checkArchiveEligibility])
-
-
-
+  // Fetch archived jobs on component mount
   useEffect(() => {
-    const initialFetch = async () => {
-      setLoading(true)
-      await refresh()
-      setLoading(false)
-    }
-    
-    initialFetch()
+    fetchArchivedJobs()
+  }, [fetchArchivedJobs])
 
-    // Auto-refresh every 15 seconds
-    const interval = setInterval(() => {
-      refresh()
-    }, 15000)
+  // Active jobs are the jobs from the polling service (already filtered to active only)
+  const activeJobs = jobs
+  
 
-    return () => clearInterval(interval)
-  }, [refresh])
 
-  // Check archive eligibility when jobs change
-  useEffect(() => {
-    if (!loading) {
-      checkArchiveEligibility()
-    }
-  }, [checkArchiveEligibility, loading])
+
+
+  // Polling service handles all data fetching automatically
 
 
   const handleJobAction = async (action: string, jobId: string) => {
@@ -177,7 +76,9 @@ export default function JobsPage() {
         await apiClient.retryJob(jobId)
         toast.success("Job queued for retry")
       }
-      await refresh()
+      
+      // Trigger immediate refresh after action
+      pollingService.triggerManualRefresh()
     } catch (error) {
       console.error(`Failed to ${action} job:`, error)
       toast.error(`Failed to ${action} job`)
@@ -189,8 +90,9 @@ export default function JobsPage() {
     try {
       const result = await apiClient.cleanupCancelledJobs()
       toast.success(result.message)
-      // Refresh the job list after cleanup
-      await refresh()
+      
+      // Trigger immediate refresh after cleanup
+      pollingService.triggerManualRefresh()
     } catch (error) {
       console.error("Failed to cleanup cancelled jobs:", error)
       toast.error("Failed to cleanup cancelled jobs")
@@ -200,6 +102,18 @@ export default function JobsPage() {
   }
 
   const handleArchiveCompleted = async () => {
+    /**
+     * BACKEND REQUIREMENTS FOR ARCHIVE FEATURE:
+     * 
+     * The backend needs to implement the following for archiving to work properly:
+     * 1. Add an "archived" boolean field to the job model
+     * 2. When POST /jobs/archive is called, set archived=true on completed jobs (don't delete them)
+     * 3. When GET /jobs?include_archived=false is called, filter out jobs where archived=true
+     * 4. When GET /jobs?include_archived=true is called, return all jobs including archived ones
+     * 
+     * Currently, the backend returns success but doesn't actually set an archived flag,
+     * so archived jobs still appear in the active jobs list.
+     */
     setArchiving(true)
     try {
       const result = await apiClient.archiveCompletedJobs()
@@ -209,8 +123,18 @@ export default function JobsPage() {
           ? ` (${result.archivedCount} job${result.archivedCount === 1 ? '' : 's'} archived)`
           : ''
         toast.success(`${result.message}${countMessage}`)
-        // Refresh the job list after archival
-        await refresh()
+        
+        // Force cache invalidation before refresh
+        apiClient.invalidateCache('/jobs')
+        
+        // Add small delay to ensure backend has completed archive operation
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Trigger immediate refresh
+        pollingService.triggerManualRefresh()
+        
+        // Also refresh archived jobs to show newly archived items
+        await fetchArchivedJobs()
       } else {
         toast.error(result.message || "Failed to archive jobs")
       }
@@ -224,26 +148,47 @@ export default function JobsPage() {
   }
 
   const handleArchiveClick = () => {
-    if (archiveEligibility?.valid) {
+    if (calculatedArchiveEligibility.valid) {
       setShowArchiveDialog(true)
     } else {
-      toast.error(archiveEligibility?.message || "No jobs eligible for archiving")
+      toast.error(calculatedArchiveEligibility.message)
     }
   }
 
   const hasCancelledJobs = activeJobs.some(job => job.status === "cancelled")
   const hasCompletedJobs = activeJobs.some(job => job.status === "completed")
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-muted-foreground">Loading jobs...</p>
-        </div>
-      </div>
-    )
+  // Calculate stats directly from jobs data (no need to wait for separate API call)
+  const calculatedStats: JobStatsType = {
+    total_jobs: activeJobs.length,
+    queue_size: activeJobs.filter(job => job.status === "queued").length,
+    processing: activeJobs.filter(job => job.status === "processing").length,
+    by_status: {
+      queued: { count: activeJobs.filter(job => job.status === "queued").length },
+      processing: { count: activeJobs.filter(job => job.status === "processing").length },
+      completed: { count: activeJobs.filter(job => job.status === "completed").length },
+      failed: { count: activeJobs.filter(job => job.status === "failed").length },
+      cancelled: { count: activeJobs.filter(job => job.status === "cancelled").length },
+    },
+    by_type: activeJobs.reduce((acc, job) => {
+      const type = job.job_type || 'unknown';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>)
   }
+
+  // Calculate archive eligibility directly from jobs data
+  const completedJobs = activeJobs.filter(job => job.status === "completed")
+  const calculatedArchiveEligibility = {
+    valid: completedJobs.length > 0,
+    eligibleJobsCount: completedJobs.length,
+    message: completedJobs.length > 0 
+      ? `${completedJobs.length} job${completedJobs.length === 1 ? '' : 's'} ready to archive`
+      : "No completed jobs available for archiving"
+  }
+
+  // Show error message if there's an error and we're not loading
+  const showError = error && !loading && activeJobs.length === 0;
 
   return (
     <RouteGuard requireAuth={true}>
@@ -273,33 +218,80 @@ export default function JobsPage() {
               variant="outline"
               size="sm"
               onClick={handleArchiveClick}
-              disabled={archiving || !archiveEligibility?.valid}
+              disabled={archiving || !calculatedArchiveEligibility.valid}
               className="text-blue-600 hover:text-blue-700 disabled:text-muted-foreground"
             >
               <Archive className={`h-4 w-4 mr-2 ${archiving ? 'animate-pulse' : ''}`} />
-              Archive{archiveEligibility?.eligibleJobsCount ? ` (${archiveEligibility.eligibleJobsCount})` : ''}
+              Archive ({calculatedArchiveEligibility.eligibleJobsCount})
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
         </div>
       </div>
 
-      {stats && (
+      {/* Show loading skeleton when initially loading */}
+      {loading && !initialLoaded && (
+        <div className="space-y-6">
+          {/* Stats Loading Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="pb-2">
+                  <Skeleton className="h-4 w-20" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-12 mb-2" />
+                  <Skeleton className="h-3 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          {/* Jobs Table Loading Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-4 w-48" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex items-center space-x-4">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Show error state */}
+      {showError && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-8">
+            <p className="text-muted-foreground mb-4">Failed to load jobs data</p>
+            <Button onClick={() => window.location.reload()} variant="outline">
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Show content when data is loaded */}
+      {!loading && (
         <FadeIn delay={0.1}>
-          <JobStats stats={stats} />
+          <JobStats stats={calculatedStats} />
         </FadeIn>
       )}
 
-      <FadeIn delay={0.2}>
-        <Tabs defaultValue="active" className="space-y-4">
+      {!loading && (
+        <FadeIn delay={0.2}>
+          <Tabs defaultValue="active" className="space-y-4">
         <TabsList>
           <TabsTrigger value="active">
             Active Jobs ({activeJobs.length})
@@ -322,6 +314,7 @@ export default function JobsPage() {
                 jobs={activeJobs} 
                 onAction={handleJobAction}
                 highlightJobId={highlightJobId}
+                tabType="active"
               />
             </CardContent>
           </Card>
@@ -340,12 +333,14 @@ export default function JobsPage() {
                 jobs={archivedJobs} 
                 onAction={handleJobAction}
                 highlightJobId={highlightJobId}
+                tabType="archived"
               />
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
-      </FadeIn>
+        </Tabs>
+        </FadeIn>
+      )}
       </div>
 
       {/* Archive Confirmation Dialog */}
@@ -354,8 +349,8 @@ export default function JobsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Archive Completed Jobs</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to archive {archiveEligibility?.eligibleJobsCount} completed job
-              {archiveEligibility?.eligibleJobsCount === 1 ? '' : 's'}?
+              Are you sure you want to archive {calculatedArchiveEligibility.eligibleJobsCount} completed job
+              {calculatedArchiveEligibility.eligibleJobsCount === 1 ? '' : 's'}?
               <br />
               <br />
               Archived jobs will be moved to the archived section and can still be viewed but cannot be modified.

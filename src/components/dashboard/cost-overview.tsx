@@ -3,61 +3,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { DollarSign, TrendingUp, RefreshCw, Zap } from "lucide-react"
-import { useEffect, useState } from "react"
-import { apiClient } from "@/lib/api-client"
-
-interface CostData {
-  today: {
-    total_usd: number
-    gemini_usd: number
-    linkup_eur: number
-    services: Record<string, {
-      cost: number
-      currency: string
-      currency_symbol: string
-      cost_usd: number
-      requests: number
-      avg_cost_per_request: number
-    }>
-  }
-  exchange_rate: {
-    eur_to_usd: number
-    last_updated: string
-    source: string
-  }
-  weekly_summary: {
-    total_cost_usd: number
-    total_requests: number
-    avg_daily_cost_usd: number
-  }
-}
+import { useCostData } from "@/contexts/DataContext"
 
 export function CostOverview() {
-  const [costData, setCostData] = useState<CostData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchCostData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const data = await apiClient.getDetailedCosts()
-        setCostData(data)
-      } catch (error) {
-        console.error('Failed to fetch cost data:', error)
-        setError('Failed to load cost information')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchCostData()
-    
-    // Refresh cost data every 30 seconds
-    const interval = setInterval(fetchCostData, 30000)
-    return () => clearInterval(interval)
-  }, [])
+  const { costData, loading, error } = useCostData()
 
   if (loading) {
     return (

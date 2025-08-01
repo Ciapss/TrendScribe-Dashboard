@@ -362,7 +362,7 @@ export function PostDetail({ postId }: PostDetailProps) {
 
                 <TabsContent value="preview" className="mt-4">
                   <div 
-                    className="prose max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-ul:text-foreground prose-ol:text-foreground prose-li:text-foreground [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-6 [&>h1]:mb-4 [&>h1]:text-foreground [&>h2]:text-2xl [&>h2]:font-semibold [&>h2]:mt-5 [&>h2]:mb-3 [&>h2]:text-foreground [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:mt-4 [&>h3]:mb-2 [&>h3]:text-foreground [&>p]:mb-3 [&>p]:leading-relaxed [&>p]:text-foreground [&>ul]:list-disc [&>ul]:ml-6 [&>ul]:mb-4 [&>ul]:text-foreground [&>ol]:list-decimal [&>ol]:ml-6 [&>ol]:mb-4 [&>ol]:text-foreground [&>li]:mb-1 [&>li]:text-foreground [&>strong]:font-bold [&>strong]:text-foreground [&>em]:italic [&>em]:text-foreground [&>blockquote]:border-l-4 [&>blockquote]:border-muted-foreground [&>blockquote]:pl-4 [&>blockquote]:italic [&>blockquote]:my-4 [&>blockquote]:text-foreground [&>code]:bg-muted [&>code]:px-1 [&>code]:py-0.5 [&>code]:rounded [&>code]:text-sm [&>code]:text-foreground [&>pre]:bg-muted [&>pre]:p-4 [&>pre]:rounded-lg [&>pre]:overflow-auto [&>pre]:text-sm [&>pre]:text-foreground"
+                    className="blog-content"
                     dangerouslySetInnerHTML={{ __html: post.content || "" }}
                   />
                 </TabsContent>

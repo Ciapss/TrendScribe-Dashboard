@@ -2,32 +2,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, TrendingUp, Calendar, Target } from "lucide-react"
-import { useEffect, useState } from "react"
-import type { DashboardStats } from "@/types"
-import { apiClient } from "@/lib/api-client"
+import { useDashboardStats } from "@/contexts/DataContext"
 
 export function OverviewCards() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const data = await apiClient.getDashboardStats()
-        setStats(data)
-      } catch (error) {
-        console.error('Failed to fetch dashboard stats:', error)
-        setError('Failed to load dashboard statistics')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchStats()
-  }, [])
+  const { stats, loading, error } = useDashboardStats()
 
   if (loading) {
     return (

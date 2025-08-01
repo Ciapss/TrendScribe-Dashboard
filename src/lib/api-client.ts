@@ -4,6 +4,31 @@ import { toast } from "sonner"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1'
 
+// Generate fallback URLs based on environment
+function getAPIFallbackUrls(primaryUrl: string): string[] {
+  const fallbacks: string[] = []
+  
+  // Only add localhost variants if we're in development (localhost/127.0.0.1)
+  if (primaryUrl.includes('localhost') || primaryUrl.includes('127.0.0.1') || primaryUrl.includes('[::1]')) {
+    try {
+      const url = new URL(primaryUrl)
+      const port = url.port || '8000' // Default to 8000 if no port specified
+      const pathname = url.pathname
+      
+      // Try different localhost variants with the same port and path
+      fallbacks.push(
+        `http://127.0.0.1:${port}${pathname}`,
+        `http://localhost:${port}${pathname}`,
+        `http://[::1]:${port}${pathname}`
+      )
+    } catch (error) {
+      console.warn('Failed to parse primary URL for fallbacks:', primaryUrl, error)
+    }
+  }
+  
+  return fallbacks.filter(url => url !== primaryUrl)
+}
+
 interface CacheEntry<T> {
   data: T
   timestamp: number
@@ -14,13 +39,30 @@ class APIClient {
   private baseURL: string
   private apiKey?: string
   private cache: Map<string, CacheEntry<unknown>> = new Map()
-  private pendingRequests: Map<string, Promise<unknown>> = new Map()
+  private pendingRequests: Map<string, { promise: Promise<unknown>; timestamp: number; abortController: AbortController }> = new Map()
+  private failureCounts: Map<string, { count: number; lastFailure: number }> = new Map()
+  private circuitBreakerState: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED'
+  private circuitBreakerFailures = 0
+  private circuitBreakerLastFailure = 0
+  private readonly circuitBreakerThreshold = 8 // Open circuit after 8 failures
+  private readonly circuitBreakerTimeout = 30000 // Keep circuit open for 30 seconds
 
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL
     
-    // Clean up expired cache entries every 5 minutes
-    setInterval(() => this.cleanupCache(), 5 * 60 * 1000)
+    // Clean up expired cache entries and stale pending requests every 30 seconds
+    setInterval(() => {
+      this.cleanupCache()
+      this.cleanupPendingRequests()
+      this.cleanupFailureCounts()
+    }, 30 * 1000)
+    
+    // Reset circuit breaker on fresh page load if it's been more than 5 minutes
+    const lastFailureAge = Date.now() - this.circuitBreakerLastFailure
+    if (this.circuitBreakerState === 'OPEN' && lastFailureAge > 300000) { // 5 minutes
+      console.log('🔄 Circuit breaker: Resetting on fresh page load (old failure)')
+      this.resetErrorState()
+    }
   }
 
   // Job age validation utilities
@@ -73,6 +115,48 @@ class APIClient {
     return null
   }
 
+  private async makeXHRRequest(url: string): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('GET', url, true)
+      
+      // Set headers
+      xhr.setRequestHeader('Content-Type', 'application/json')
+      const accessToken = this.getAccessToken()
+      if (accessToken) {
+        xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
+      } else if (this.apiKey) {
+        xhr.setRequestHeader('Authorization', `Bearer ${this.apiKey}`)
+      }
+      
+      xhr.timeout = 10000 // 10 second timeout
+      
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText)
+            resolve(response)
+          } catch (error) {
+            reject(new Error(`Failed to parse JSON: ${error}`))
+          }
+        } else {
+          reject(new Error(`XHR request failed: ${xhr.status} ${xhr.statusText}`))
+        }
+      }
+      
+      xhr.onerror = () => {
+        reject(new Error('XHR request failed due to network error'))
+      }
+      
+      xhr.ontimeout = () => {
+        reject(new Error('XHR request timed out'))
+      }
+      
+      console.log(`🌐 XHR: Starting request to ${url}`)
+      xhr.send()
+    })
+  }
+
   private cleanupCache() {
     const now = Date.now()
     for (const [key, entry] of this.cache.entries()) {
@@ -80,6 +164,172 @@ class APIClient {
         this.cache.delete(key)
       }
     }
+  }
+
+  private cleanupPendingRequests() {
+    const now = Date.now()
+    const maxAge = 30000 // 30 seconds max age for pending requests
+    let cleanedCount = 0
+    
+    for (const [key, entry] of this.pendingRequests.entries()) {
+      if (now - entry.timestamp > maxAge) {
+        console.warn(`🧹 Cleaning up stale pending request: ${key} (age: ${now - entry.timestamp}ms)`)
+        // Abort the stale request
+        try {
+          entry.abortController.abort()
+        } catch (error) {
+          console.warn('Error aborting stale request:', error)
+        }
+        this.pendingRequests.delete(key)
+        cleanedCount++
+      }
+    }
+    
+    if (cleanedCount > 0) {
+      console.log(`🧹 Cleaned up ${cleanedCount} stale pending requests. Active requests: ${this.pendingRequests.size}`)
+    }
+    
+    // Warn if too many pending requests
+    if (this.pendingRequests.size > 10) {
+      console.warn(`⚠️ High number of pending requests: ${this.pendingRequests.size}. This may indicate a problem.`)
+    }
+  }
+
+  private cleanupFailureCounts() {
+    const now = Date.now()
+    const maxAge = 300000 // 5 minutes
+    let cleanedCount = 0
+    
+    for (const [key, entry] of this.failureCounts.entries()) {
+      if (now - entry.lastFailure > maxAge) {
+        this.failureCounts.delete(key)
+        cleanedCount++
+      }
+    }
+    
+    // Auto-reset circuit breaker if it's been open for more than 2 minutes
+    if (this.circuitBreakerState === 'OPEN' && now - this.circuitBreakerLastFailure > 120000) {
+      console.log('🔄 Circuit breaker: Auto-resetting after 2 minutes open')
+      this.circuitBreakerState = 'CLOSED'
+      this.circuitBreakerFailures = 0
+    }
+    
+    if (cleanedCount > 0) {
+      console.log(`🧹 Cleaned up ${cleanedCount} old failure counts`)
+    }
+  }
+
+  private updateCircuitBreaker(isSuccess: boolean) {
+    const now = Date.now()
+    
+    if (isSuccess) {
+      // Reset circuit breaker on success
+      if (this.circuitBreakerState === 'HALF_OPEN') {
+        console.log('✅ Circuit breaker: Request succeeded, closing circuit')
+        this.circuitBreakerState = 'CLOSED'
+        this.circuitBreakerFailures = 0
+      }
+    } else {
+      this.circuitBreakerFailures++
+      this.circuitBreakerLastFailure = now
+      
+      if (this.circuitBreakerState === 'CLOSED' && this.circuitBreakerFailures >= this.circuitBreakerThreshold) {
+        console.warn(`🚫 Circuit breaker: Opening circuit after ${this.circuitBreakerFailures} consecutive failures`)
+        this.circuitBreakerState = 'OPEN'
+      } else if (this.circuitBreakerState === 'HALF_OPEN') {
+        console.warn(`🚫 Circuit breaker: Request failed in half-open state, reopening circuit`)
+        this.circuitBreakerState = 'OPEN'
+        this.circuitBreakerLastFailure = now
+      }
+    }
+    
+    // Note: Half-open state transition is handled in isCircuitOpen() method
+  }
+
+  private isCircuitOpen(): boolean {
+    // Check if we should move to half-open state based on time
+    const now = Date.now()
+    if (this.circuitBreakerState === 'OPEN' && now - this.circuitBreakerLastFailure > this.circuitBreakerTimeout) {
+      console.log('🔄 Circuit breaker: Moving to half-open state (timeout expired)')
+      this.circuitBreakerState = 'HALF_OPEN'
+    }
+    
+    return this.circuitBreakerState === 'OPEN'
+  }
+
+  private shouldBackoff(endpoint: string): boolean {
+    // Check circuit breaker first
+    if (this.isCircuitOpen()) {
+      console.log('🚫 Circuit breaker is OPEN, blocking all requests')
+      return true
+    }
+    
+    const failure = this.failureCounts.get(endpoint)
+    if (!failure) return false
+    
+    // Don't backoff on first few failures for polling endpoints
+    const isPollingEndpoint = endpoint.includes('/jobs') || endpoint.includes('/stats')
+    const minFailuresForBackoff = isPollingEndpoint ? 5 : 3 // Even more lenient
+    
+    if (failure.count < minFailuresForBackoff) {
+      return false
+    }
+    
+    const now = Date.now()
+    // More reasonable backoff times: 2s, 4s, 8s, 16s, max 30s
+    const baseDelay = isPollingEndpoint ? 2000 : 1000
+    const maxDelay = isPollingEndpoint ? 30000 : 60000
+    const backoffTime = Math.min(maxDelay, baseDelay * Math.pow(2, failure.count - minFailuresForBackoff))
+    const shouldWait = now - failure.lastFailure < backoffTime
+    
+    if (shouldWait) {
+      console.log(`⏳ Exponential backoff for ${endpoint}: waiting ${backoffTime}ms (attempt ${failure.count})`)
+    }
+    
+    return shouldWait
+  }
+
+  private recordFailure(endpoint: string, errorMessage?: string) {
+    // Don't count network timeouts or connection issues as backoff-worthy failures
+    const isTemporaryFailure = errorMessage && (
+      errorMessage.includes('Failed to fetch') ||
+      errorMessage.includes('NetworkError') ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('Connection')
+    )
+    
+    if (isTemporaryFailure) {
+      console.log(`🌐 Temporary network issue for ${endpoint}, not counting for backoff: ${errorMessage}`)
+      return
+    }
+    
+    const existing = this.failureCounts.get(endpoint)
+    const count = existing ? existing.count + 1 : 1
+    this.failureCounts.set(endpoint, {
+      count,
+      lastFailure: Date.now()
+    })
+    console.log(`📈 Recorded failure for ${endpoint} (count: ${count})`)
+  }
+
+  private recordSuccess(endpoint: string) {
+    if (this.failureCounts.has(endpoint)) {
+      this.failureCounts.delete(endpoint)
+      console.log(`✅ Reset failure count for ${endpoint}`)
+    }
+    this.updateCircuitBreaker(true)
+  }
+
+  private getRequestTimeout(endpoint: string): number {
+    // Reduce jobs timeout to prevent long hangs
+    if (endpoint.includes('/jobs')) {
+      return 30000 // 30 seconds for jobs endpoints (reduced from 60s)
+    }
+    // Cost monitoring should timeout quickly to not block other requests
+    if (endpoint.includes('/monitoring/costs/detailed')) {
+      return 15000 // 15 seconds for cost monitoring
+    }
+    return 30000 // 30 seconds for other requests
   }
 
   private getCacheKey(endpoint: string, options: RequestInit = {}): string {
@@ -101,11 +351,127 @@ class APIClient {
   }
 
   private setCache<T>(key: string, data: T, ttlMs: number = 30000) {
+    // Implement cache size limit to prevent memory bloat
+    if (this.cache.size > 1000) {
+      // Remove oldest 10% of entries when cache gets too large
+      const sortedEntries = Array.from(this.cache.entries())
+        .sort(([, a], [, b]) => a.timestamp - b.timestamp)
+      const toRemove = sortedEntries.slice(0, Math.floor(this.cache.size * 0.1))
+      toRemove.forEach(([key]) => this.cache.delete(key))
+      console.log(`Cache size limit reached, removed ${toRemove.length} old entries`)
+    }
+
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
       expiry: Date.now() + ttlMs
     })
+  }
+
+  private getOptimalTTL(endpoint: string, method: string): number {
+    // Static data - cache for longer
+    if (endpoint.includes('/industries/names') || endpoint.includes('/industries') && method === 'GET') {
+      return 300000 // 5 minutes for industry lists
+    }
+    if (endpoint.includes('/stats') && !endpoint.includes('/jobs')) {
+      return 60000 // 1 minute for dashboard stats
+    }
+    if (endpoint.includes('/costs')) {
+      return 15000 // 15 seconds for cost data
+    }
+    // Dynamic data - shorter cache
+    if (endpoint.includes('/jobs') || endpoint.includes('/trends')) {
+      return 5000 // 5 seconds for job/trend data
+    }
+    // Default cache time
+    return 30000 // 30 seconds
+  }
+
+  private async tryFetchWithSingleUrl(
+    url: string,
+    options: RequestInit,
+    requestId: string,
+    timeout: number
+  ): Promise<Response> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    
+    try {
+      // Make the fetch request
+      
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      })
+      
+      clearTimeout(timeoutId)
+      // Request succeeded
+      return response
+    } catch (error) {
+      clearTimeout(timeoutId)
+      // Request failed
+      throw error
+    }
+  }
+
+  private async tryFetchWithFallback(
+    endpoint: string,
+    options: RequestInit,
+    requestId: string,
+    timeout: number
+  ): Promise<Response> {
+    const primaryUrl = this.baseURL + endpoint
+    const fallbackUrls = getAPIFallbackUrls(this.baseURL).map(url => url + endpoint)
+    const urls = [primaryUrl, ...fallbackUrls]
+    
+    // Disable fallback system temporarily
+    return await this.tryFetchWithSingleUrl(primaryUrl, options, requestId, timeout)
+    
+    // In production, only try the primary URL
+    if (process.env.NODE_ENV === 'production' && fallbackUrls.length > 0) {
+      console.log(`🏭 Production mode: skipping ${fallbackUrls.length} localhost fallback URLs`)
+      return await this.tryFetchWithSingleUrl(primaryUrl, options, requestId, timeout)
+    }
+    
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i]
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+      
+      try {
+        console.log(`🌐 Trying URL ${i + 1}/${urls.length} [${requestId}]: ${url}`)
+        
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        })
+        
+        clearTimeout(timeoutId)
+        console.log(`✅ Success with URL ${i + 1} [${requestId}]: ${url}`)
+        
+        // Update baseURL if fallback worked
+        if (i > 0) {
+          const newBaseUrl = fallbackUrls[i - 1].replace(endpoint, '')
+          console.log(`🔄 Updating baseURL from ${this.baseURL} to ${newBaseUrl}`)
+          this.baseURL = newBaseUrl
+        }
+        
+        return response
+      } catch (error) {
+        clearTimeout(timeoutId)
+        console.warn(`❌ Failed URL ${i + 1}/${urls.length} [${requestId}]: ${url}`, error)
+        
+        // If this is the last URL, throw the error
+        if (i === urls.length - 1) {
+          throw error
+        }
+        
+        // Otherwise continue to next URL
+        continue
+      }
+    }
+    
+    throw new Error('All fallback URLs failed')
   }
 
   private async request<T>(
@@ -116,30 +482,48 @@ class APIClient {
     const cacheKey = this.getCacheKey(endpoint, options)
     const isReadOnlyRequest = !options.method || options.method === 'GET'
     const shouldCache = isReadOnlyRequest && !cacheOptions?.skipCache
-    const ttl = cacheOptions?.ttl || 30000 // Default 30 seconds
+    const ttl = cacheOptions?.ttl || this.getOptimalTTL(endpoint, options.method || 'GET')
+    
+    // Check for exponential backoff
+    if (this.shouldBackoff(endpoint)) {
+      throw new Error(`Request blocked by exponential backoff: ${endpoint}`)
+    }
     
     // Check cache for GET requests
     if (shouldCache) {
       const cached = this.getFromCache<T>(cacheKey)
       if (cached) {
-        console.log('Cache hit for:', endpoint)
+        console.log(`💾 Cache hit for: ${endpoint} (instant response, pending: ${this.pendingRequests.size})`)
         return cached
       }
     }
     
     // Check for pending request (deduplication)
     if (shouldCache && this.pendingRequests.has(cacheKey)) {
-      console.log('Deduplicating request for:', endpoint)
-      return this.pendingRequests.get(cacheKey)! as Promise<T>
+      const pendingEntry = this.pendingRequests.get(cacheKey)!
+      const age = Date.now() - pendingEntry.timestamp
+      // Only reuse if request is less than 15 seconds old
+      if (age < 15000) {
+        console.log(`🔄 Deduplicating request for: ${endpoint} (age: ${age}ms, pending: ${this.pendingRequests.size})`)
+        return pendingEntry.promise as Promise<T>
+      } else {
+        console.log(`🗑️ Stale pending request, aborting and creating new one: ${endpoint} (age: ${age}ms)`)
+        try {
+          pendingEntry.abortController.abort()
+        } catch (error) {
+          console.warn('Error aborting stale pending request:', error)
+        }
+        this.pendingRequests.delete(cacheKey)
+      }
     }
 
-    const url = `${this.baseURL}${endpoint}`
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {}),
     }
     
-    // Removed timeout - let browser handle natural timeouts
+    // Set standard timeout
+    const timeout = this.getRequestTimeout(endpoint)
 
     // Use JWT access token for authentication (prioritize over API key)
     const accessToken = this.getAccessToken()
@@ -149,19 +533,16 @@ class APIClient {
       headers['Authorization'] = `Bearer ${this.apiKey}`
     }
 
-    // Log the request for debugging
-    console.log('API Request:', {
-      url,
-      method: options.method || 'GET',
-      body: options.body,
-      headers,
-      cached: false
-    })
+    // Log the request for debugging with timing
+    const requestStart = performance.now()
+    const requestId = Math.random().toString(36).substr(2, 9)
+    
 
-    const requestPromise = fetch(url, {
+
+    const requestPromise = this.tryFetchWithFallback(endpoint, {
       ...options,
       headers,
-    }).then(async (response) => {
+    }, requestId, timeout).then(async (response) => {
       if (!response.ok) {
         // Log the error response for debugging
         const errorText = await response.text()
@@ -170,6 +551,13 @@ class APIClient {
           statusText: response.statusText,
           body: errorText
         })
+        
+        // Handle 429 Rate Limit specifically
+        if (response.status === 429) {
+          console.warn('Rate limited - waiting before retry:', errorText)
+          // Don't show toast for rate limits - they're handled gracefully by polling logic
+          throw new Error(`Rate limited: ${errorText}`)
+        }
         
         // Handle 401 Unauthorized specifically
         if (response.status === 401) {
@@ -195,23 +583,70 @@ class APIClient {
 
       const data = await response.json()
       
-      // Cache successful GET responses
+      // Record success and cache successful GET responses
+      this.recordSuccess(endpoint)
       if (shouldCache) {
         this.setCache(cacheKey, data, ttl)
       }
       
       return data
-    }).finally(() => {
-      // Clean up pending requests
-      if (shouldCache) {
-        this.pendingRequests.delete(cacheKey)
+    }).catch((error) => {
+      const requestEnd = performance.now()
+      const duration = requestEnd - requestStart
+      
+      if (error.name === 'AbortError') {
+        console.error(`⏰ API Timeout [${requestId}]: ${endpoint} timed out after ${duration.toFixed(2)}ms`)
+        throw new Error(`Request timeout after ${timeout}ms: ${endpoint}`)
       }
+      
+      console.error(`❌ API Error [${requestId}]: ${endpoint} failed after ${duration.toFixed(2)}ms`, {
+        error: error.message,
+        errorName: error.name,
+        errorStack: error.stack,
+        duration: `${duration.toFixed(2)}ms`,
+        pendingRequests: shouldCache ? this.pendingRequests.size : 'N/A',
+        baseURL: this.baseURL,
+        fetchSupported: typeof fetch !== 'undefined',
+        abortControllerSupported: typeof AbortController !== 'undefined'
+      })
+      
+      // Record failure for exponential backoff (but not for timeouts)
+      if (error.name !== 'AbortError') {
+        this.recordFailure(endpoint, error.message)
+        // Only update circuit breaker for non-temporary failures
+        const isTemporaryFailure = error.message && (
+          error.message.includes('Failed to fetch') ||
+          error.message.includes('NetworkError') ||
+          error.message.includes('timeout') ||
+          error.message.includes('Connection')
+        )
+        if (!isTemporaryFailure) {
+          this.updateCircuitBreaker(false)
+        }
+      }
+      
+      throw error
+    }).finally(() => {
+      // TEMPORARY: Disable cleanup for debugging
+      // Clean up pending requests - DISABLED
+      // if (shouldCache) {
+      //   const wasRemoved = this.pendingRequests.delete(cacheKey)
+      //   if (wasRemoved) {
+      //     console.log(`🧹 Cleaned up completed request [${requestId}]:`, endpoint, `(${this.pendingRequests.size} remaining)`)
+      //   }
+      // }
     })
 
-    // Store pending request for deduplication
-    if (shouldCache) {
-      this.pendingRequests.set(cacheKey, requestPromise)
-    }
+    // TEMPORARY: Disable pending request storage for debugging
+    // Store pending request for deduplication - DISABLED
+    // if (shouldCache) {
+    //   const pendingController = new AbortController()
+    //   this.pendingRequests.set(cacheKey, {
+    //     promise: requestPromise,
+    //     timestamp: Date.now(),
+    //     abortController: pendingController
+    //   })
+    // }
 
     return requestPromise
   }
@@ -228,6 +663,23 @@ class APIClient {
         this.cache.delete(key)
       }
     }
+  }
+
+  // Method to reset backoff and circuit breaker (useful for user-initiated actions)
+  resetErrorState() {
+    console.log('🔄 Resetting error state: clearing failure counts and circuit breaker')
+    this.failureCounts.clear()
+    this.circuitBreakerState = 'CLOSED'
+    this.circuitBreakerFailures = 0
+    this.circuitBreakerLastFailure = 0
+  }
+
+  // Method to force open the circuit breaker (for testing)
+  forceCircuitOpen() {
+    console.log('🚫 Force opening circuit breaker')
+    this.circuitBreakerState = 'OPEN'
+    this.circuitBreakerFailures = this.circuitBreakerThreshold
+    this.circuitBreakerLastFailure = Date.now()
   }
 
   // Dashboard & Analytics
@@ -527,15 +979,25 @@ class APIClient {
     jobType?: string
     limit?: number
     skip?: number
+    includeArchived?: boolean
   }): Promise<Job[]> {
     const queryParams = new URLSearchParams()
+    
+    // Add include_archived parameter to control whether archived jobs are included
+    if (params?.includeArchived !== undefined) {
+      queryParams.append('include_archived', params.includeArchived.toString())
+    } else {
+      // Default to excluding archived jobs unless explicitly requested
+      queryParams.append('include_archived', 'false')
+    }
+    
     if (params?.status) queryParams.append('status', params.status)
     if (params?.jobType) queryParams.append('job_type', params.jobType)
     if (params?.limit) queryParams.append('limit', params.limit.toString())
     if (params?.skip) queryParams.append('skip', params.skip.toString())
     
     const query = queryParams.toString()
-    const url = `/jobs${query ? `?${query}&` : '?'}include_archived=false`
+    const url = query ? `/jobs?${query}` : '/jobs'
     
     // Skip cache entirely for active jobs or when fetching all jobs (which might include active ones)
     const hasActiveStatus = params?.status === 'processing' || params?.status === 'queued'
@@ -546,26 +1008,31 @@ class APIClient {
       ? { skipCache: true } 
       : { skipCache: true } // Always skip cache for real-time updates
     
-    console.log(`Jobs API: ${shouldSkipCache ? 'Skipping cache' : 'Using cache'} for jobs request`, { params, shouldSkipCache })
+    
     const response = await this.request<Job[]>(url, {}, cacheOptions)
     
+    
     // Transform _id to id for each job
-    return response.map(job => {
-      const jobWithId = job as Job & { _id?: string }
+    const transformedJobs = response.map(job => {
+      const jobWithId = job as Job & { _id?: string; archived?: boolean }
       return {
-      ...job,
-      id: jobWithId._id || job.id,
-      // Convert date strings to Date objects - handle ISO strings with timezone properly
-      created_at: job.created_at ? new Date(job.created_at) : new Date(),
-      updated_at: job.updated_at ? new Date(job.updated_at) : new Date(),
-      queued_at: job.queued_at ? new Date(job.queued_at) : new Date(),
-      started_at: job.started_at ? new Date(job.started_at) : undefined,
-      completed_at: job.completed_at ? new Date(job.completed_at) : undefined,
-    }})
+        ...job,
+        id: jobWithId._id || job.id,
+        // Convert date strings to Date objects - handle ISO strings with timezone properly
+        created_at: job.created_at ? new Date(job.created_at) : new Date(),
+        updated_at: job.updated_at ? new Date(job.updated_at) : new Date(),
+        queued_at: job.queued_at ? new Date(job.queued_at) : new Date(),
+        started_at: job.started_at ? new Date(job.started_at) : undefined,
+        completed_at: job.completed_at ? new Date(job.completed_at) : undefined,
+        archived: jobWithId.archived || false, // Ensure archived field exists
+      }
+    })
+    
+    return transformedJobs
   }
 
   async getJob(jobId: string): Promise<Job> {
-    const job = await this.request<Job>(`/jobs/${jobId}`, {}, { skipCache: true }) // No cache for individual jobs
+    const job = await this.request<Job>(`/jobs/${jobId}`, {}, { ttl: 2000 }) // Short cache for deduplication
     
     // Transform _id to id
     const jobWithId = job as Job & { _id?: string }
@@ -620,7 +1087,7 @@ class APIClient {
     message: string
   }> {
     try {
-      const jobs = await this.getJobs()
+      const jobs = await this.getJobs({ includeArchived: false })
       const validation = this.validateArchiveRequest(jobs)
       
       return {
@@ -640,9 +1107,12 @@ class APIClient {
 
   async archiveCompletedJobs(): Promise<{ success: boolean; message: string; archivedCount?: number }> {
     try {
-      // First validate the request
-      const jobs = await this.getJobs()
+      // First validate the request - get only non-archived jobs for validation
+      console.log('🔍 Getting active jobs for archive validation...')
+      const jobs = await this.getJobs({ includeArchived: false })
+      console.log('🔍 Active jobs for validation:', jobs.map(j => ({ id: j.id, status: j.status, archived: (j as { archived?: boolean }).archived })))
       const validation = this.validateArchiveRequest(jobs)
+      console.log('🔍 Archive validation result:', validation)
       
       if (!validation.valid) {
         return {
@@ -653,9 +1123,17 @@ class APIClient {
       }
 
       // Proceed with archiving all completed jobs
+      console.log('🗃️ Making archive request to backend...')
       const result = await this.request<{ success: boolean; message: string; archived_count?: number }>('/jobs/archive', { method: 'POST' })
+      console.log('🗃️ Backend archive response:', result)
+      
+      // Debug: Log what's happening with the archive
+      if (result.success) {
+        console.log('⚠️ Archive appears successful, but backend may not be setting archived flag on jobs')
+      }
       
       // Invalidate job-related caches
+      console.log('🗑️ Invalidating job caches after archive...')
       this.invalidateCache('/jobs')
       
       return {
@@ -673,35 +1151,6 @@ class APIClient {
     }
   }
 
-  async getArchivedJobs(params?: {
-    status?: string
-    jobType?: string
-    limit?: number
-    skip?: number
-  }): Promise<Job[]> {
-    const queryParams = new URLSearchParams()
-    if (params?.status) queryParams.append('status', params.status)
-    if (params?.jobType) queryParams.append('job_type', params.jobType)
-    if (params?.limit) queryParams.append('limit', params.limit.toString())
-    if (params?.skip) queryParams.append('skip', params.skip.toString())
-    
-    const query = queryParams.toString()
-    const response = await this.request<Job[]>(`/jobs/archived${query ? `?${query}` : ''}`)
-    
-    // Transform _id to id for each job
-    return response.map(job => {
-      const jobWithId = job as Job & { _id?: string }
-      return {
-      ...job,
-      id: jobWithId._id || job.id,
-      // Convert date strings to Date objects
-      created_at: new Date(job.created_at),
-      updated_at: new Date(job.updated_at),
-      queued_at: new Date(job.queued_at),
-      started_at: job.started_at ? new Date(job.started_at) : undefined,
-      completed_at: job.completed_at ? new Date(job.completed_at) : undefined,
-    }})
-  }
 
   // Cost tracking
   async getCosts(): Promise<{

@@ -2,35 +2,15 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { useEffect, useState } from "react"
-import { apiClient } from "@/lib/api-client"
+import { useDashboardStats } from "@/contexts/DataContext"
 
 interface ActivityChartProps {
   className?: string
 }
 
 export function ActivityChart({ className }: ActivityChartProps) {
-  const [data, setData] = useState<{ date: string; count: number }[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchActivityData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const stats = await apiClient.getDashboardStats()
-        setData(stats.postsOverTime)
-      } catch (error) {
-        console.error('Failed to fetch activity data:', error)
-        setError(error instanceof Error ? error.message : 'Failed to load activity data')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchActivityData()
-  }, [])
+  const { stats, loading, error } = useDashboardStats()
+  const data = stats?.postsOverTime || []
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)

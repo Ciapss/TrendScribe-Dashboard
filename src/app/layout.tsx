@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { RouteGuard } from "@/components/auth/route-guard"
 import { AuthenticatedLayout } from "@/components/auth/authenticated-layout"
+import { JobProvider } from "@/contexts/JobContext"
+import { DataProvider } from "@/contexts/DataContext"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,9 +27,13 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <AuthProvider>
           <RouteGuard>
-            <AuthenticatedLayout>
-              {children}
-            </AuthenticatedLayout>
+            <JobProvider>
+              <DataProvider>
+                <AuthenticatedLayout>
+                  {children}
+                </AuthenticatedLayout>
+              </DataProvider>
+            </JobProvider>
           </RouteGuard>
         </AuthProvider>
         <Toaster />

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -55,10 +55,7 @@ import { LANGUAGES, LANGUAGE_LABELS, BLOG_TYPES, BLOG_TYPE_LABELS } from "@/lib/
 import { apiClient } from "@/lib/api-client"
 import { TrendSelector } from "@/components/trends/trend-selector"
 import type { Trend, TrendFilters, Industry } from "@/types"
-import type { Job } from "@/types/job"
 import { SourceSelector } from "@/components/sources/source-selector"
-import { useJobPolling } from "@/hooks/use-job-polling"
-import { DiscoveryJobStorage } from "@/utils/discovery-job-storage"
 import { ResearchCacheSettingsComponent } from "@/components/generation/research-cache-settings"
 import { estimateGenerationCost } from "@/utils/cost-estimator"
 import { loadResearchPreferences, saveResearchPreferences } from "@/utils/research-preferences"
@@ -121,8 +118,7 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
   const [trends, setTrends] = useState<Trend[]>([])
   const [trendsLoading, setTrendsLoading] = useState(false)
   const [trendsError, setTrendsError] = useState<string | null>(null)
-  const [discoveryJobId, setDiscoveryJobId] = useState<string | null>(null)
-  const [usingSyncMode, setUsingSyncMode] = useState(false)
+  const [usingSyncMode] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -136,56 +132,13 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
   const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null)
   const [openAccordionItem, setOpenAccordionItem] = useState<string>("method")
   const [currentStep, setCurrentStep] = useState(0)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
   
   // Step definitions
   const steps = ["method", "content", "settings"] as const
   const router = useRouter()
 
-  // Job polling for trend discovery
-  const { 
-    job: discoveryJob, 
-    error: discoveryJobError,
-    cancelJob: cancelDiscoveryJob,
-    isActive: isDiscoveryActive 
-  } = useJobPolling({
-    jobId: discoveryJobId,
-    enabled: !!discoveryJobId,
-    onSuccess: (job: Job) => {
-      console.log('Discovery job completed:', job)
-      // Remove from persistent storage
-      if (discoveryJobId) {
-        DiscoveryJobStorage.updateJobStatus(discoveryJobId, 'completed')
-      }
-      // Clear discovery job first
-      setDiscoveryJobId(null)
-      // Force reload trends from the database after discovery with a slight delay
-      setTimeout(() => {
-        setRefreshTrigger(prev => prev + 1)
-        loadTrends(false)
-      }, 500)
-    },
-    onError: (error: Error) => {
-      console.error('Discovery job failed:', error)
-      // Remove from persistent storage
-      if (discoveryJobId) {
-        DiscoveryJobStorage.updateJobStatus(discoveryJobId, 'failed')
-      }
-      setTrendsError(error.message)
-      setDiscoveryJobId(null)
-    }
-  })
-
-  // Recovery function to check for existing jobs when modal opens
-  const recoverActiveJobs = useCallback(() => {
-    if (!open || !trendFilters.industry) return
-
-    const existingJob = DiscoveryJobStorage.getActiveJobForIndustry(trendFilters.industry)
-    if (existingJob && !discoveryJobId) {
-      console.log('🔄 Recovering active discovery job:', existingJob)
-      setDiscoveryJobId(existingJob.jobId)
-    }
-  }, [open, trendFilters.industry, discoveryJobId])
+  // Simple discovery job tracking
+  const [isDiscovering, setIsDiscovering] = useState(false)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -219,6 +172,9 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
     }
   }
 
+  // Debouncing ref to prevent rapid successive calls
+  const loadTrendsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
   // Load trends when trending_select mode is enabled or when Load Topics is clicked
   const loadTrends = useCallback(async (forceDiscover = false) => {
     if (form.watch("generationType") !== "trending_select") return
@@ -230,111 +186,98 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
       setTotalPages(0)
       return
     }
-    
-    setTrendsLoading(true)
-    setTrendsError(null)
-    
-    try {
-      if (forceDiscover && trendFilters.industry) {
-        // Check for existing active job first
-        const existingJob = DiscoveryJobStorage.getActiveJobForIndustry(trendFilters.industry)
-        if (existingJob) {
-          console.log('⚠️ Active discovery job already exists for', trendFilters.industry, ':', existingJob.jobId)
-          setDiscoveryJobId(existingJob.jobId)
-          setTrendsLoading(false)
-          return
-        }
 
-        // Use async discovery to create a job for trend discovery
-        try {
-          const response = await apiClient.discoverTrendsAsync({
-            industry: trendFilters.industry,
-            limit: 200  // Get up to 200 sources
-          })
-          
-          console.log('✅ Discovery job created successfully:', response)
-          if (response.job_id) {
-            // Store in persistent storage
-            DiscoveryJobStorage.addJob(response.job_id, trendFilters.industry)
-            setDiscoveryJobId(response.job_id)
-            setTrendsLoading(false) // Stop loading since we're now tracking via job
-            console.log('📋 Job ID set for polling:', response.job_id)
-          } else {
-            console.error('❌ No job_id returned from async discovery:', response)
-            throw new Error('No job_id returned from async discovery')
+    // Clear any pending debounced calls
+    if (loadTrendsTimeoutRef.current) {
+      clearTimeout(loadTrendsTimeoutRef.current)
+      loadTrendsTimeoutRef.current = null
+    }
+
+    // For forced discovery (Load Topics button), execute immediately
+    // For automatic calls (dependency changes), debounce by 300ms
+    const executeLoad = async () => {
+      setTrendsLoading(true)
+      setTrendsError(null)
+      
+      try {
+        if (forceDiscover && trendFilters.industry) {
+          setIsDiscovering(true)
+          try {
+            // Use async discovery to create a job
+            const response = await apiClient.discoverTrendsAsync({
+              industry: trendFilters.industry,
+              limit: 200
+            })
+            
+            console.log('Discovery job created:', response.job_id)
+            // Job will be tracked by global polling system
+            // Redirect to jobs page to see progress
+            router.push(`/jobs?highlight=${response.job_id}`)
+            setOpen(false)
+            
+          } catch {
+            // Fallback to synchronous discovery
+            console.log('Falling back to sync discovery')
+            const response = await apiClient.discoverTrends({
+              industry: trendFilters.industry,
+              limit: 200
+            })
+            
+            setTrends(response.trends as Trend[])
+            setTotalCount(response.discovered_count)
+            setTotalPages(1)
+            setCurrentPage(1)
+          } finally {
+            setIsDiscovering(false)
           }
+        } else {
+          // Use existing trends from database with filtering for today and selected industry
+          const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
           
-        } catch (asyncError) {
-          // Fallback to synchronous discovery if async is not supported
-          console.log('⚠️ Async discovery not supported, falling back to sync:', asyncError)
-          console.log('🔄 Using synchronous discovery instead...')
-          setUsingSyncMode(true)
-          
-          const response = await apiClient.discoverTrends({
-            industry: trendFilters.industry,
-            limit: 200
+          const response = await apiClient.getTrends({
+            page: currentPage,
+            limit: 30,
+            industry: trendFilters.industry, // Only show trends for selected industry
+            ...trendFilters,
+            // Add date filter for today - this would need to be supported by the API
+            discoveredAfter: today,
           })
           
-          console.log('✅ Synchronous discovery completed:', response)
           setTrends(response.trends as Trend[])
-          setTotalCount(response.discovered_count)
-          setTotalPages(1) // Discovery returns all results in one page
-          setCurrentPage(1)
-          setUsingSyncMode(false)
+          setTotalCount(response.pagination.total)
+          setTotalPages(response.pagination.pages)
         }
-      } else {
-        // Use existing trends from database with filtering for today and selected industry
-        const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
-        
-        const response = await apiClient.getTrends({
-          page: currentPage,
-          limit: 30,
-          industry: trendFilters.industry, // Only show trends for selected industry
-          ...trendFilters,
-          // Add date filter for today - this would need to be supported by the API
-          discoveredAfter: today,
-        })
-        
-        setTrends(response.trends as Trend[])
-        setTotalCount(response.pagination.total)
-        setTotalPages(response.pagination.pages)
-      }
-    } catch (error) {
-      setTrendsError(error instanceof Error ? error.message : "Failed to load trends")
-    } finally {
-      if (!forceDiscover || !trendFilters.industry) {
-        setTrendsLoading(false)
+      } catch (error) {
+        setTrendsError(error instanceof Error ? error.message : "Failed to load trends")
+      } finally {
+        if (!forceDiscover || !trendFilters.industry) {
+          setTrendsLoading(false)
+        }
       }
     }
-  }, [form, trendFilters, currentPage])
+
+    if (forceDiscover) {
+      // Execute immediately for Load Topics button
+      executeLoad()
+    } else {
+      // Debounce for automatic calls
+      loadTrendsTimeoutRef.current = setTimeout(executeLoad, 300)
+    }
+  }, [trendFilters.industry, currentPage]) // Removed form to reduce re-renders
 
   // Load industries on component mount
   useEffect(() => {
     loadIndustries()
   }, [])
 
-  // Recover active jobs when modal opens or industry changes
-  useEffect(() => {
-    recoverActiveJobs()
-  }, [recoverActiveJobs])
 
-  // Cleanup effect for component unmount
-  useEffect(() => {
-    return () => {
-      // Don't remove jobs from storage on unmount - they should persist
-      // Only clear local state
-      if (discoveryJobId) {
-        console.log('🧹 Component unmounting, keeping job in storage:', discoveryJobId)
-      }
-    }
-  }, [discoveryJobId])
 
   useEffect(() => {
     const generationType = form.watch("generationType")
     if (generationType === "trending_select") {
       loadTrends()
     }
-  }, [form, loadTrends, currentPage, trendFilters, refreshTrigger])
+  }, [currentPage, trendFilters, form.watch("generationType")]) // Removed loadTrends to break circular dependency
 
   // Load existing trends when industry changes in trendFilters
   useEffect(() => {
@@ -351,7 +294,7 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
         setCurrentPage(1)
       }
     }
-  }, [form, loadTrends, trendFilters.industry, refreshTrigger])
+  }, [trendFilters.industry, form.watch("generationType")]) // Removed loadTrends and form to prevent loops
 
   // Update cost estimate when research settings change
   const updateCostEstimate = useCallback(() => {
@@ -782,7 +725,7 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
                           <div className="flex items-center gap-2">
                             <TrendingUp className="h-5 w-5 text-blue-500" />
                             <h3 className="text-base font-semibold">Choose Trending Topics</h3>
-                            {isDiscoveryActive && (
+                            {isDiscovering && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 Discovering...
@@ -790,39 +733,13 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
                             )}
                           </div>
 
-                          {/* Discovery Job Status */}
-                          {discoveryJob && isDiscoveryActive && (
-                            <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                                  <span className="text-sm font-medium text-blue-800">
-                                    Discovering trending topics for {trendFilters.industry}
-                                  </span>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    if (discoveryJobId) {
-                                      DiscoveryJobStorage.updateJobStatus(discoveryJobId, 'cancelled')
-                                    }
-                                    cancelDiscoveryJob()
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          )}
 
                           <TrendSelector
                             trends={trends}
                             selectedTrendIds={form.watch("selectedTrendIds") || []}
                             onTrendSelection={(trendIds) => form.setValue("selectedTrendIds", trendIds)}
-                            loading={trendsLoading || isDiscoveryActive || usingSyncMode}
-                            error={(trendsError || discoveryJobError?.message) || undefined}
+                            loading={trendsLoading || isDiscovering || usingSyncMode}
+                            error={trendsError || undefined}
                             totalCount={totalCount}
                             currentPage={currentPage}
                             totalPages={totalPages}
@@ -830,7 +747,7 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
                             filters={trendFilters}
                             onFiltersChange={setTrendFilters}
                             onLoadTopics={() => loadTrends(true)}
-                            disabled={isDiscoveryActive || usingSyncMode}
+                            disabled={isDiscovering || usingSyncMode}
                             className="lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start"
                           />
                           

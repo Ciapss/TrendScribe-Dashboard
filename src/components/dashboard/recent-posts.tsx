@@ -4,10 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, ExternalLink } from "lucide-react"
-import { useEffect, useState } from "react"
-import type { BlogPost } from "@/types"
 import { INDUSTRY_LABELS } from "@/lib/constants"
-import { apiClient } from "@/lib/api-client"
+import { useRecentPosts } from "@/contexts/DataContext"
 import Link from "next/link"
 
 interface RecentPostsProps {
@@ -15,36 +13,7 @@ interface RecentPostsProps {
 }
 
 export function RecentPosts({ className }: RecentPostsProps) {
-  const [posts, setPosts] = useState<BlogPost[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchRecentPosts = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const response = await apiClient.getPosts({ 
-          limit: 5, 
-          sort: 'date-desc' 
-        })
-        
-        // Client-side sorting to ensure newest posts are first
-        const sortedPosts = [...response.posts].sort((a, b) => {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        })
-        
-        setPosts(sortedPosts)
-      } catch (error) {
-        console.error('Failed to fetch recent posts:', error)
-        setError('Failed to load recent posts')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchRecentPosts()
-  }, [])
+  const { posts, loading, error } = useRecentPosts()
 
   const getQualityColor = (score: number) => {
     if (score >= 85) return "bg-green-100 text-green-800"

@@ -39,9 +39,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { GenerationFormAccordion } from "@/components/generation/generation-form-accordion"
-import { useState, useEffect } from "react"
-import { apiClient } from "@/lib/api-client"
 import { useAuth } from "@/components/auth/auth-provider"
+import { useJobs } from "@/contexts/JobContext"
 
 const items = [
   {
@@ -83,9 +82,12 @@ const items = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const [processingCount, setProcessingCount] = useState(0)
   const { user, logout } = useAuth()
   const { setOpenMobile } = useSidebar()
+  const { state: { jobs } } = useJobs()
+  
+  // Calculate processing count from existing job data
+  const processingCount = jobs.filter(job => job.status === 'processing').length
 
   const settingsItems = [
     {
@@ -107,25 +109,7 @@ export function AppSidebar() {
     ] : [])
   ]
 
-  useEffect(() => {
-    const fetchProcessingCount = async () => {
-      try {
-        const stats = await apiClient.getJobStats()
-        setProcessingCount(stats.processing || 0)
-      } catch (error) {
-        console.error("Failed to fetch job stats:", error)
-        setProcessingCount(0)
-      }
-    }
-
-    // Fetch immediately
-    fetchProcessingCount()
-
-    // Set up polling every 5 seconds
-    const interval = setInterval(fetchProcessingCount, 5000)
-
-    return () => clearInterval(interval)
-  }, [])
+  // Processing count is calculated from existing job data - no API calls needed
 
   return (
     <Sidebar>

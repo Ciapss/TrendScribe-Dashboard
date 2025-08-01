@@ -7,32 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DollarSign, TrendingDown, TrendingUp, Zap, RefreshCw, Calendar, BarChart3, CalendarDays, TrendingUp as TrendUp } from "lucide-react"
 import { useEffect, useState } from "react"
 import { apiClient } from "@/lib/api-client"
+import { useCostData } from "@/contexts/DataContext"
 
-interface CostData {
-  today: {
-    total_usd: number
-    gemini_usd: number
-    linkup_eur: number
-    services: Record<string, {
-      cost: number
-      currency: string
-      currency_symbol: string
-      cost_usd: number
-      requests: number
-      avg_cost_per_request: number
-    }>
-  }
-  exchange_rate: {
-    eur_to_usd: number
-    last_updated: string
-    source: string
-  }
-  weekly_summary: {
-    total_cost_usd: number
-    total_requests: number
-    avg_daily_cost_usd: number
-  }
-}
 
 interface MonthlyCostData {
   month: number
@@ -64,37 +40,22 @@ interface MonthlyCostData {
 }
 
 export function CostAnalytics() {
-  const [costData, setCostData] = useState<CostData | null>(null)
+  const { costData, loading, error } = useCostData()
   const [monthlyCostData, setMonthlyCostData] = useState<MonthlyCostData | null>(null)
-  const [loading, setLoading] = useState(true)
   const [monthlyLoading, setMonthlyLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [monthlyError, setMonthlyError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-
-  const fetchCostData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const data = await apiClient.getDetailedCosts()
-      setCostData(data)
-    } catch (error) {
-      console.error('Failed to fetch cost data:', error)
-      setError('Failed to load cost information')
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
 
   const fetchMonthlyCostData = async () => {
     try {
       setMonthlyLoading(true)
-      setError(null)
+      setMonthlyError(null)
       const data = await apiClient.getMonthlyCosts()
       setMonthlyCostData(data)
     } catch (error) {
       console.error('Failed to fetch monthly cost data:', error)
-      setError('Failed to load monthly cost information')
+      setMonthlyError('Failed to load monthly cost information')
     } finally {
       setMonthlyLoading(false)
     }
@@ -102,19 +63,13 @@ export function CostAnalytics() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([fetchCostData(), fetchMonthlyCostData()])
+    await fetchMonthlyCostData()
+    setRefreshing(false)
   }
 
   useEffect(() => {
-    fetchCostData()
+    // Only fetch monthly data on mount - cost data comes from context
     fetchMonthlyCostData()
-    
-    // Auto-refresh every 15 seconds
-    const interval = setInterval(() => {
-      fetchCostData()
-      fetchMonthlyCostData()
-    }, 15000)
-    return () => clearInterval(interval)
   }, [])
 
   if (loading) {
