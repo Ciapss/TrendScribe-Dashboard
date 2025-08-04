@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useJobs } from "@/contexts/JobContext"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -120,7 +121,6 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
   const [trendsError, setTrendsError] = useState<string | null>(null)
   const [usingSyncMode] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [trendFilters, setTrendFilters] = useState<TrendFilters>({
     sortBy: "trend_score",
@@ -136,9 +136,13 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
   // Step definitions
   const steps = ["method", "content", "settings"] as const
   const router = useRouter()
+  const { state: jobState } = useJobs()
 
   // Simple discovery job tracking
   const [isDiscovering, setIsDiscovering] = useState(false)
+  
+  // Track the last discovery job ID we initiated
+  const lastDiscoveryJobId = useRef<string | null>(null)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -183,7 +187,6 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
     if (!trendFilters.industry && !forceDiscover) {
       setTrends([])
       setTotalCount(0)
-      setTotalPages(0)
       return
     }
 
@@ -210,6 +213,8 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
             })
             
             console.log('Discovery job created:', response.job_id)
+            // Store the job ID for monitoring completion
+            lastDiscoveryJobId.current = response.job_id
             // Job will be tracked by global polling system
             // Redirect to jobs page to see progress
             router.push(`/jobs?highlight=${response.job_id}`)
@@ -225,30 +230,38 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
             
             setTrends(response.trends as Trend[])
             setTotalCount(response.discovered_count)
-            setTotalPages(1)
             setCurrentPage(1)
           } finally {
             setIsDiscovering(false)
           }
         } else {
-          // Use existing trends from database with filtering for today and selected industry
-          const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
-          
+          // Use existing trends from database with filtering for selected industry
+          // Load all trends for the industry at once for client-side pagination
           const response = await apiClient.getTrends({
-            page: currentPage,
-            limit: 30,
+            limit: 1000, // Load all available trends
             industry: trendFilters.industry, // Only show trends for selected industry
-            ...trendFilters,
-            // Add date filter for today - this would need to be supported by the API
-            discoveredAfter: today,
+            sortBy: trendFilters.sortBy,
+            sortOrder: trendFilters.sortOrder,
+            search: trendFilters.search,
+            // Removed date filter to prevent backend timeouts
           })
           
           setTrends(response.trends as Trend[])
           setTotalCount(response.pagination.total)
-          setTotalPages(response.pagination.pages)
         }
       } catch (error) {
-        setTrendsError(error instanceof Error ? error.message : "Failed to load trends")
+        const errorMessage = error instanceof Error ? error.message : "Failed to load trends"
+        
+        // Provide more specific error messages for common issues
+        if (errorMessage.includes("timeout")) {
+          setTrendsError("The trends API is taking too long to respond. This is a known backend performance issue. Please try again or contact support.")
+        } else if (errorMessage.includes("Request blocked by exponential backoff")) {
+          setTrendsError("Too many failed requests. Please wait a moment before trying again.")
+        } else if (errorMessage.includes("Circuit breaker")) {
+          setTrendsError("The trends service is temporarily unavailable. Please try again in a few minutes.")
+        } else {
+          setTrendsError(errorMessage)
+        }
       } finally {
         if (!forceDiscover || !trendFilters.industry) {
           setTrendsLoading(false)
@@ -263,7 +276,7 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
       // Debounce for automatic calls
       loadTrendsTimeoutRef.current = setTimeout(executeLoad, 300)
     }
-  }, [trendFilters.industry, currentPage]) // Removed form to reduce re-renders
+  }, [trendFilters.industry]) // Removed currentPage for client-side pagination
 
   // Load industries on component mount
   useEffect(() => {
@@ -277,7 +290,7 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
     if (generationType === "trending_select") {
       loadTrends()
     }
-  }, [currentPage, trendFilters, form.watch("generationType")]) // Removed loadTrends to break circular dependency
+  }, [trendFilters.industry, trendFilters.search, trendFilters.sortBy, trendFilters.sortOrder, form.watch("generationType")]) // Only API-relevant filters, not source filter
 
   // Load existing trends when industry changes in trendFilters
   useEffect(() => {
@@ -290,7 +303,6 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
         // Clear trends when no industry is selected
         setTrends([])
         setTotalCount(0)
-        setTotalPages(0)
         setCurrentPage(1)
       }
     }
@@ -482,6 +494,22 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
       setOpenAccordionItem("method")
     }
   }, [open])
+
+  // Monitor job completion and auto-refresh trends
+  useEffect(() => {
+    if (!lastDiscoveryJobId.current) return
+
+    const job = jobState.jobs.find(j => j.id === lastDiscoveryJobId.current)
+    if (job && job.status === 'completed') {
+      console.log('🎉 Discovery job completed, auto-refreshing trends:', job.id)
+      // Clear the tracking ID
+      lastDiscoveryJobId.current = null
+      // Refresh trends if modal is open and we're on trending_select
+      if (open && form.watch("generationType") === "trending_select") {
+        loadTrends(false)
+      }
+    }
+  }, [jobState.jobs, open, loadTrends, form])
 
   // Keyboard navigation
   useEffect(() => {
@@ -742,7 +770,6 @@ export function GenerationFormAccordion({ children }: GenerationFormProps) {
                             error={trendsError || undefined}
                             totalCount={totalCount}
                             currentPage={currentPage}
-                            totalPages={totalPages}
                             onPageChange={setCurrentPage}
                             filters={trendFilters}
                             onFiltersChange={setTrendFilters}

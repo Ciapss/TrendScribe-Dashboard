@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useJobs } from "@/contexts/JobContext"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -105,7 +106,6 @@ export function GenerationForm({ children }: GenerationFormProps) {
   const [trendsError, setTrendsError] = useState<string | null>(null)
   const [usingSyncMode] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [trendFilters, setTrendFilters] = useState<TrendFilters>({
     sortBy: "trend_score",
@@ -116,6 +116,7 @@ export function GenerationForm({ children }: GenerationFormProps) {
   const [showAdvancedSources, setShowAdvancedSources] = useState(false)
   const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null)
   const router = useRouter()
+  const { state: jobState } = useJobs()
 
   const totalSteps = 4
 
@@ -124,6 +125,9 @@ export function GenerationForm({ children }: GenerationFormProps) {
   
   // Track if we need to refresh trends after discovery
   const [pendingTrendRefresh, setPendingTrendRefresh] = useState(false)
+  
+  // Track the last discovery job ID we initiated
+  const lastDiscoveryJobId = useRef<string | null>(null)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -204,6 +208,8 @@ export function GenerationForm({ children }: GenerationFormProps) {
             })
             
             console.log('Discovery job created:', response.job_id)
+            // Store the job ID for monitoring completion
+            lastDiscoveryJobId.current = response.job_id
             // Job will be tracked by global polling system
             // Mark that we need to refresh trends when returning
             setPendingTrendRefresh(true)
@@ -221,24 +227,23 @@ export function GenerationForm({ children }: GenerationFormProps) {
             
             setTrends(response.trends as Trend[])
             setTotalCount(response.discovered_count)
-            setTotalPages(1)
             setCurrentPage(1)
           } finally {
             setIsDiscovering(false)
           }
         } else {
           // Use existing trends from database with filtering for selected industry
-          // Remove the date filter so we can see all trends for the industry
+          // Load all trends for the industry at once for client-side pagination
           const response = await apiClient.getTrends({
-            page: currentPage,
-            limit: 30,
+            limit: 1000, // Load all available trends
             industry: trendFilters.industry, // Only show trends for selected industry
-            ...trendFilters,
+            sortBy: trendFilters.sortBy,
+            sortOrder: trendFilters.sortOrder,
+            search: trendFilters.search,
           })
           
           setTrends(response.trends as Trend[])
           setTotalCount(response.pagination.total)
-          setTotalPages(response.pagination.pages)
         }
       } catch (error) {
         setTrendsError(error instanceof Error ? error.message : "Failed to load trends")
@@ -257,7 +262,7 @@ export function GenerationForm({ children }: GenerationFormProps) {
       // Debounce for automatic calls
       loadTrendsTimeoutRef.current = setTimeout(executeLoad, 100)
     }
-  }, [trendFilters, currentPage, form, router]) // Added all dependencies
+  }, [trendFilters, form, router]) // Removed currentPage - using client-side pagination
 
   // Load industries on component mount
   useEffect(() => {
@@ -270,7 +275,7 @@ export function GenerationForm({ children }: GenerationFormProps) {
     if (generationType === "trending_select") {
       loadTrends()
     }
-  }, [currentPage, trendFilters, loadTrends, form]) // Added necessary dependencies
+  }, [trendFilters.industry, trendFilters.search, trendFilters.sortBy, trendFilters.sortOrder, loadTrends, form]) // Only API-relevant filters, not source filter
 
   // Clear trends when no industry is selected (handled by the main useEffect above)
   useEffect(() => {
@@ -279,7 +284,6 @@ export function GenerationForm({ children }: GenerationFormProps) {
       // Clear trends when no industry is selected
       setTrends([])
       setTotalCount(0)
-      setTotalPages(0)
       setCurrentPage(1)
     }
   }, [trendFilters.industry, form]) // Added form dependency
@@ -424,6 +428,25 @@ export function GenerationForm({ children }: GenerationFormProps) {
       }
     }
   }, [open, pendingTrendRefresh, loadTrends, form])
+
+  // Monitor job completion and auto-refresh trends
+  useEffect(() => {
+    if (!lastDiscoveryJobId.current) return
+
+    const job = jobState.jobs.find(j => j.id === lastDiscoveryJobId.current)
+    if (job && job.status === 'completed') {
+      console.log('🎉 Discovery job completed, auto-refreshing trends:', job.id)
+      // Clear the tracking ID
+      lastDiscoveryJobId.current = null
+      // Refresh trends if modal is open and we're on trending_select
+      if (open && form.watch("generationType") === "trending_select") {
+        loadTrends(false)
+      } else {
+        // Set pending refresh for when modal opens
+        setPendingTrendRefresh(true)
+      }
+    }
+  }, [jobState.jobs, open, loadTrends, form])
 
   const handleNext = () => {
     setCurrentStep(prev => Math.min(prev + 1, totalSteps))
@@ -671,7 +694,6 @@ export function GenerationForm({ children }: GenerationFormProps) {
                     error={trendsError || undefined}
                     totalCount={totalCount}
                     currentPage={currentPage}
-                    totalPages={totalPages}
                     onPageChange={setCurrentPage}
                     filters={trendFilters}
                     onFiltersChange={setTrendFilters}

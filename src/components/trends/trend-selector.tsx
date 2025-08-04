@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +21,6 @@ interface TrendSelectorProps {
   error?: string;
   totalCount: number;
   currentPage: number;
-  totalPages: number;
   onPageChange: (page: number) => void;
   filters: TrendFiltersType;
   onFiltersChange: (filters: TrendFiltersType) => void;
@@ -38,7 +37,6 @@ export function TrendSelector({
   error,
   totalCount,
   currentPage,
-  totalPages,
   onPageChange,
   filters,
   onFiltersChange,
@@ -72,7 +70,7 @@ export function TrendSelector({
       return { value: source, label: source.charAt(0).toUpperCase() + source.slice(1), count: 0 };
     });
     
-    // Remove duplicates and count occurrences
+    // Remove duplicates and count occurrences from all trends (not filtered by search)
     const uniqueSources = sourceMap.reduce((acc, source) => {
       const existing = acc.find(s => s.value === source.value);
       if (existing) {
@@ -92,6 +90,7 @@ export function TrendSelector({
     
     return uniqueSources.sort((a, b) => b.count - a.count);
   }, [trends]);
+
 
   const handleTrendSelect = useCallback((trendId: string) => {
     // Only allow selecting one trend at a time
@@ -126,6 +125,18 @@ export function TrendSelector({
     });
   }, []);
 
+  // Reset to page 1 when filters change
+  const handlePageChange = useCallback((page: number) => {
+    onPageChange(page);
+  }, [onPageChange]);
+
+  // When search or source filters change, reset to page 1
+  useEffect(() => {
+    if (currentPage > 1 && (filters.search || filters.source)) {
+      onPageChange(1);
+    }
+  }, [filters.search, filters.source, currentPage, onPageChange]);
+
   const handleRowSelect = useCallback((trendId: string) => {
     handleTrendSelect(trendId);
   }, [handleTrendSelect]);
@@ -151,7 +162,7 @@ export function TrendSelector({
   }, []);
 
   // Filter trends based on search term and source - whole word matching
-  const filteredTrends = useMemo(() => {
+  const allFilteredTrends = useMemo(() => {
     let filtered = trends;
     
     // Filter by source first
@@ -202,6 +213,18 @@ export function TrendSelector({
     });
   }, [trends, filters.search, filters.source]);
 
+  // Client-side pagination
+  const trendsPerPage = 10;
+  const filteredTrends = useMemo(() => {
+    const startIndex = (currentPage - 1) * trendsPerPage;
+    const endIndex = startIndex + trendsPerPage;
+    return allFilteredTrends.slice(startIndex, endIndex);
+  }, [allFilteredTrends, currentPage]);
+
+  // Update total count and pages based on filtered data
+  const actualTotalCount = allFilteredTrends.length;
+  const actualTotalPages = Math.ceil(actualTotalCount / trendsPerPage);
+
   // Helper function to highlight search terms - whole word matching
   const highlightSearchTerm = useCallback((text: string, searchTerm: string) => {
     if (!searchTerm || !searchTerm.trim()) {
@@ -222,22 +245,22 @@ export function TrendSelector({
 
 
   const renderPagination = () => {
-    if (totalPages <= 1) return null;
+    if (actualTotalPages <= 1) return null;
 
-    const startItem = (currentPage - 1) * 10 + 1;
-    const endItem = Math.min(currentPage * 10, totalCount);
+    const startItem = (currentPage - 1) * trendsPerPage + 1;
+    const endItem = Math.min(currentPage * trendsPerPage, actualTotalCount);
 
     return (
       <div className="space-y-4">
         {/* Mobile pagination info */}
         <div className="text-center text-sm text-muted-foreground lg:hidden">
-          Page {currentPage} of {totalPages} • {totalCount} total trends
+          Page {currentPage} of {actualTotalPages} • {actualTotalCount} total trends
         </div>
         
         {/* Desktop pagination info */}
         <div className="hidden lg:flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Showing {startItem}-{endItem} of {totalCount} trends
+            Showing {startItem}-{endItem} of {actualTotalCount} trends
           </div>
         </div>
         
@@ -247,7 +270,7 @@ export function TrendSelector({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => onPageChange(currentPage - 1)}
+            onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
             className="px-3"
           >
@@ -259,14 +282,14 @@ export function TrendSelector({
           <div className="flex items-center gap-1">
             {/* Mobile: Show 3 pages max */}
             <div className="flex items-center gap-1 sm:hidden">
-              {Array.from({ length: Math.min(totalPages, 3) }, (_, i) => {
+              {Array.from({ length: Math.min(actualTotalPages, 3) }, (_, i) => {
                 let pageNum;
-                if (totalPages <= 3) {
+                if (actualTotalPages <= 3) {
                   pageNum = i + 1;
                 } else if (currentPage <= 2) {
                   pageNum = i + 1;
-                } else if (currentPage >= totalPages - 1) {
-                  pageNum = totalPages - 2 + i;
+                } else if (currentPage >= actualTotalPages - 1) {
+                  pageNum = actualTotalPages - 2 + i;
                 } else {
                   pageNum = currentPage - 1 + i;
                 }
@@ -277,7 +300,7 @@ export function TrendSelector({
                     key={pageNum}
                     variant={currentPage === pageNum ? "default" : "outline"}
                     size="sm"
-                    onClick={() => onPageChange(pageNum)}
+                    onClick={() => handlePageChange(pageNum)}
                     className="w-9 h-9"
                   >
                     {pageNum}
@@ -288,14 +311,14 @@ export function TrendSelector({
             
             {/* Desktop: Show 5 pages max */}
             <div className="hidden sm:flex items-center gap-1">
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              {Array.from({ length: Math.min(actualTotalPages, 5) }, (_, i) => {
                 let pageNum;
-                if (totalPages <= 5) {
+                if (actualTotalPages <= 5) {
                   pageNum = i + 1;
                 } else if (currentPage <= 3) {
                   pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
+                } else if (currentPage >= actualTotalPages - 2) {
+                  pageNum = actualTotalPages - 4 + i;
                 } else {
                   pageNum = currentPage - 2 + i;
                 }
@@ -306,7 +329,7 @@ export function TrendSelector({
                     key={pageNum}
                     variant={currentPage === pageNum ? "default" : "outline"}
                     size="sm"
-                    onClick={() => onPageChange(pageNum)}
+                    onClick={() => handlePageChange(pageNum)}
                     className="w-8 h-8"
                   >
                     {pageNum}
@@ -320,8 +343,8 @@ export function TrendSelector({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === actualTotalPages}
             className="px-3"
           >
             <span className="hidden sm:inline mr-1">Next</span>
@@ -392,7 +415,7 @@ export function TrendSelector({
                 </div>
                 {filters.search && (
                   <p className="text-xs text-muted-foreground">
-                    {filteredTrends.length} of {totalCount} topics match your search
+                    {actualTotalCount} of {totalCount} topics match your search
                   </p>
                 )}
               </div>
@@ -417,7 +440,7 @@ export function TrendSelector({
                   {!loading && (
                     <Badge variant="secondary">
                       {filters.search ? 
-                        `${filteredTrends.length} of ${totalCount}` : 
+                        `${actualTotalCount} of ${totalCount}` : 
                         `${totalCount} total`
                       }
                     </Badge>
@@ -472,7 +495,7 @@ export function TrendSelector({
                 </div>
               ))}
             </div>
-          ) : filteredTrends.length === 0 ? (
+          ) : actualTotalCount === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">
                 {filters.search ? 
