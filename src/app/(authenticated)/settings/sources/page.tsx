@@ -21,7 +21,8 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { RSSFeedManager } from "@/components/sources/rss-feed-manager";
-import { TwitterHashtagManager } from "@/components/sources/twitter-hashtag-manager";
+import { TwitterKeywordManager } from "@/components/sources/twitter-keyword-manager";
+import { KeywordExamples } from "@/components/sources/keyword-examples";
 import { SourceSelector } from "@/components/sources/source-selector";
 import { INDUSTRIES, INDUSTRY_LABELS } from "@/lib/constants";
 import { apiClient } from "@/lib/api-client";
@@ -558,12 +559,12 @@ export default function SourcesSettingsPage() {
             <Rss className="h-4 w-4" />
             {isMobile ? "RSS" : "RSS Feeds"}
           </TabsTrigger>
-          <TabsTrigger value="hashtags" className={cn(
+          <TabsTrigger value="keywords" className={cn(
             "flex items-center gap-1",
             isMobile ? "px-2 py-3 text-xs col-span-1" : "gap-2"
           )}>
             <Hash className="h-4 w-4" />
-            {isMobile ? "Hashtags" : "Hashtags"}
+            {isMobile ? "Keywords" : "Keywords"}
           </TabsTrigger>
           <TabsTrigger value="sources" className={cn(
             "flex items-center gap-1",
@@ -615,7 +616,7 @@ export default function SourcesSettingsPage() {
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Twitter Hashtags</span>
+                    <span className="text-sm font-medium">Twitter Keywords</span>
                     <Badge variant="secondary">Available</Badge>
                   </div>
                   
@@ -689,10 +690,10 @@ export default function SourcesSettingsPage() {
                     "justify-start",
                     isMobile ? "text-xs px-2 py-2 h-auto" : "w-full"
                   )}
-                  onClick={() => setActiveTab("hashtags")}
+                  onClick={() => setActiveTab("keywords")}
                 >
                   <Hash className="h-4 w-4 mr-1" />
-                  {isMobile ? "Hashtags" : "Manage Hashtags"}
+                  {isMobile ? "Keywords" : "Manage Keywords"}
                 </Button>
                 
                 <Button 
@@ -759,8 +760,8 @@ export default function SourcesSettingsPage() {
                 <div className="space-y-2">
                   <h4 className="font-medium text-sm">Twitter/X</h4>
                   <p className="text-sm text-muted-foreground">
-                    Monitors trending hashtags and conversations on Twitter/X to discover 
-                    viral topics and emerging trends across industries.
+                    Monitors trending keywords and conversations on Twitter/X to discover 
+                    viral topics and emerging trends across industries with improved engagement.
                   </p>
                 </div>
               </div>
@@ -1165,13 +1166,21 @@ export default function SourcesSettingsPage() {
           </div>
         </TabsContent>
 
-        {/* Hashtags Tab */}
-        <TabsContent value="hashtags" className={cn(
+        {/* Keywords Tab */}
+        <TabsContent value="keywords" className={cn(
           isMobile 
             ? "flex-1 min-h-0 overflow-auto pb-4" 
             : "space-y-6"
         )}>
-          <TwitterHashtagManager />
+          <div className={cn(isMobile && "space-y-4")}>
+            <TwitterKeywordManager />
+            
+            {/* Keyword Examples */}
+            <KeywordExamples 
+              showIndustryFilter={true}
+              maxExamples={6}
+            />
+          </div>
         </TabsContent>
       </Tabs>
     </div>

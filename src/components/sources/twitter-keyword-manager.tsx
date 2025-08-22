@@ -6,13 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { TagInput } from "@/components/ui/tag-input";
 import { toast } from "sonner";
 import { INDUSTRIES, INDUSTRY_LABELS } from "@/lib/constants";
 import { apiClient } from "@/lib/api-client";
@@ -21,12 +21,13 @@ import {
   MoreVertical, 
   Edit, 
   Trash2, 
-  Hash
+  Tag,
+  Sparkles
 } from "lucide-react";
 
-interface TwitterHashtag {
+interface TwitterKeywords {
   id: string;
-  hashtag: string;
+  primary_keywords: string[];
   industry: string;
   enabled: boolean;
   is_custom: boolean;
@@ -44,8 +45,8 @@ interface TwitterHashtag {
   updated_at: string;
 }
 
-interface AddHashtagFormData {
-  hashtag: string;
+interface AddKeywordsFormData {
+  primary_keywords: string[];
   industry: string;
   track_sentiment: boolean;
   min_engagement: number;
@@ -56,32 +57,32 @@ interface AddHashtagFormData {
   exclude_keywords: string[];
 }
 
-// Default hashtags by industry (predefined popular hashtags)
-const DEFAULT_HASHTAGS: Record<string, string[]> = {
-  "technology": ["#Tech", "#Innovation", "#TechNews", "#Programming", "#Software", "#Developer"],
-  "healthcare": ["#Health", "#Healthcare", "#Wellness", "#Medicine", "#Fitness", "#Nutrition"],
-  "finance": ["#Finance", "#Investing", "#PersonalFinance", "#Money", "#Economics", "#Trading"],
-  "marketing": ["#Marketing", "#DigitalMarketing", "#SEO", "#SocialMedia", "#ContentMarketing", "#Advertising"],
-  "education": ["#Education", "#Learning", "#Teaching", "#Students", "#EdTech", "#OnlineLearning"],
-  "entertainment": ["#Entertainment", "#Movies", "#Music", "#Gaming", "#TV", "#Streaming"],
-  "sports": ["#Sports", "#Fitness", "#Athletics", "#NFL", "#Soccer", "#Basketball"],
-  "business": ["#Business", "#Entrepreneurship", "#Startup", "#Leadership", "#Management", "#Strategy"],
-  "science": ["#Science", "#Research", "#Innovation", "#STEM", "#Biology", "#Physics"],
-  "environment": ["#Environment", "#Climate", "#Sustainability", "#GreenTech", "#ClimateChange", "#Renewable"],
-  "politics": ["#Politics", "#Policy", "#Government", "#Election", "#Democracy", "#News"],
-  "travel": ["#Travel", "#Tourism", "#Adventure", "#Explore", "#Wanderlust", "#Vacation"],
-  "food": ["#Food", "#Cooking", "#Recipe", "#Foodie", "#Culinary", "#Nutrition"],
-  "fashion": ["#Fashion", "#Style", "#OOTD", "#Designer", "#Trend", "#Beauty"],
-  "automotive": ["#Cars", "#Automotive", "#Tesla", "#ElectricVehicles", "#Racing", "#Motorcycles"],
-  "real-estate": ["#RealEstate", "#Property", "#Housing", "#Investment", "#Mortgage", "#Homebuying"],
-  "cryptocurrency": ["#Crypto", "#Bitcoin", "#Ethereum", "#Blockchain", "#DeFi", "#NFT"],
-  "ai-ml": ["#AI", "#MachineLearning", "#ArtificialIntelligence", "#DeepLearning", "#DataScience", "#ML"],
-  "cybersecurity": ["#Cybersecurity", "#InfoSec", "#Privacy", "#DataProtection", "#Hacking", "#Security"],
-  "startups": ["#Startup", "#Entrepreneur", "#Innovation", "#VC", "#Funding", "#TechStartup"]
+// Default keywords by industry (simplified arrays)
+const DEFAULT_KEYWORDS: Record<string, string[]> = {
+  "technology": ["ChatGPT", "OpenAI", "AI", "machine learning", "software development", "programming"],
+  "healthcare": ["nutrition", "fitness", "wellness", "mental health", "healthcare", "medicine"],
+  "finance": ["Bitcoin", "cryptocurrency", "stock market", "investing", "DeFi", "fintech"],
+  "marketing": ["digital marketing", "SEO", "social media", "content marketing", "advertising", "branding"],
+  "education": ["online learning", "EdTech", "education", "teaching", "e-learning", "students"],
+  "entertainment": ["streaming", "Netflix", "gaming", "movies", "music", "entertainment"],
+  "sports": ["NFL", "NBA", "soccer", "Olympics", "fitness", "athletics"],
+  "business": ["startup", "entrepreneur", "business strategy", "venture capital", "innovation", "leadership"],
+  "science": ["research", "climate change", "space", "biotechnology", "scientific discovery", "innovation"],
+  "environment": ["climate change", "sustainability", "renewable energy", "carbon neutral", "green tech", "eco-friendly"],
+  "politics": ["election", "policy", "government", "democracy", "political news", "legislation"],
+  "travel": ["travel", "tourism", "destinations", "vacation", "adventure", "wanderlust"],
+  "food": ["food trends", "recipes", "cooking", "restaurant", "culinary", "nutrition"],
+  "fashion": ["fashion", "style", "designer", "trends", "clothing", "beauty"],
+  "automotive": ["electric vehicles", "Tesla", "automotive", "cars", "EV", "autonomous driving"],
+  "real-estate": ["real estate", "housing market", "property", "investment", "mortgage", "homebuying"],
+  "cryptocurrency": ["Bitcoin", "Ethereum", "DeFi", "NFT", "crypto", "blockchain"],
+  "ai-ml": ["ChatGPT", "OpenAI", "Claude", "artificial intelligence", "machine learning", "AI models"],
+  "cybersecurity": ["cybersecurity", "data protection", "privacy", "hacking", "security", "cyber threats"],
+  "startups": ["startup", "venture capital", "funding", "innovation", "entrepreneur", "tech startup"]
 };
 
-export function TwitterHashtagManager() {
-  const [hashtags, setHashtags] = useState<TwitterHashtag[]>([]);
+export function TwitterKeywordManager() {
+  const [keywords, setKeywords] = useState<TwitterKeywords[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Dialog states
@@ -90,8 +91,8 @@ export function TwitterHashtagManager() {
   const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
   
   // Form states
-  const [addFormData, setAddFormData] = useState<AddHashtagFormData>({
-    hashtag: '',
+  const [addFormData, setAddFormData] = useState<AddKeywordsFormData>({
+    primary_keywords: [],
     industry: '',
     track_sentiment: true,
     min_engagement: 50,
@@ -101,71 +102,50 @@ export function TwitterHashtagManager() {
     include_keywords: [],
     exclude_keywords: []
   });
-  const [editingHashtag, setEditingHashtag] = useState<TwitterHashtag | null>(null);
+  const [editingKeywords, setEditingKeywords] = useState<TwitterKeywords | null>(null);
   const [bulkAddIndustry, setBulkAddIndustry] = useState('');
-  const [selectedDefaultHashtags, setSelectedDefaultHashtags] = useState<Set<string>>(new Set());
+  const [selectedDefaultKeywords, setSelectedDefaultKeywords] = useState<Set<string>>(new Set());
 
-  // Expanded industries for viewing hashtags
+  // Expanded industries for viewing keywords
   const [expandedIndustries, setExpandedIndustries] = useState<Set<string>>(new Set());
 
-  // Load hashtags on component mount
+  // Load keywords on component mount
   useEffect(() => {
-    loadHashtags();
+    loadKeywords();
   }, []);
 
-  const loadHashtags = async () => {
+  const loadKeywords = async () => {
     try {
       setLoading(true);
-      // Add timestamp to force cache bypass
-      const data = await apiClient.getUserHashtags(false); // Get all hashtags including disabled
-      console.log('Loaded hashtags data at', new Date().toISOString(), ':', data);
+      const data = await apiClient.getUserKeywords(false); // Get all keywords including disabled
+      console.log('Loaded keywords data at', new Date().toISOString(), ':', data);
       
-      // Debug: Check for hashtags with undefined IDs
-      const hashtagsWithoutIds = data.filter(h => !h.id || h.id === 'undefined');
-      if (hashtagsWithoutIds.length > 0) {
-        console.warn('Found hashtags without valid IDs:', hashtagsWithoutIds);
-      }
-      
-      // Debug: Log enabled/disabled status
-      console.log('Hashtag states:', data.map(h => ({ 
-        hashtag: h.hashtag, 
-        id: h.id, 
-        enabled: h.enabled 
-      })));
-      
-      setHashtags(data);
+      setKeywords(data);
     } catch (error) {
-      console.error('Failed to load hashtags:', error);
-      toast.error("Failed to load hashtags");
+      console.error('Failed to load keywords:', error);
+      toast.error("Failed to load keywords");
     } finally {
       setLoading(false);
     }
   };
 
-
-  const handleAddHashtag = async () => {
-    if (!addFormData.hashtag || !addFormData.industry) {
-      toast.error("Hashtag and industry are required");
+  const handleAddKeywords = async () => {
+    if (addFormData.primary_keywords.length === 0 || !addFormData.industry) {
+      toast.error("Primary keywords and industry are required");
       return;
     }
 
-    // Ensure hashtag starts with #
-    const cleanHashtag = addFormData.hashtag.startsWith('#') 
-      ? addFormData.hashtag 
-      : `#${addFormData.hashtag}`;
-
     try {
-      await apiClient.addUserHashtag({
+      await apiClient.addUserKeywords({
         ...addFormData,
-        hashtag: cleanHashtag,
         is_custom: true
       });
 
-      toast.success(`Successfully added ${cleanHashtag} to ${INDUSTRY_LABELS[addFormData.industry]}`);
+      toast.success(`Successfully added keywords to ${INDUSTRY_LABELS[addFormData.industry]}`);
       
       setShowAddDialog(false);
       setAddFormData({
-        hashtag: '',
+        primary_keywords: [],
         industry: '',
         track_sentiment: true,
         min_engagement: 50,
@@ -175,27 +155,28 @@ export function TwitterHashtagManager() {
         include_keywords: [],
         exclude_keywords: []
       });
-      await loadHashtags();
+      await loadKeywords();
       
       // Notify parent component to refresh source configuration
-      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
+      window.dispatchEvent(new CustomEvent('keyword-config-changed'));
     } catch (error) {
-      console.error('Error adding hashtag:', error);
-      toast.error("Failed to add hashtag");
+      console.error('Error adding keywords:', error);
+      toast.error("Failed to add keywords");
     }
   };
 
-  const handleBulkAddHashtags = async () => {
-    if (!bulkAddIndustry || selectedDefaultHashtags.size === 0) {
-      toast.error("Please select an industry and at least one hashtag");
+  const handleBulkAddKeywords = async () => {
+    if (!bulkAddIndustry || selectedDefaultKeywords.size === 0) {
+      toast.error("Please select an industry and at least one keyword set");
       return;
     }
 
     try {
-      const hashtagsToAdd = Array.from(selectedDefaultHashtags);
-      const promises = hashtagsToAdd.map(hashtag =>
-        apiClient.addUserHashtag({
-          hashtag,
+      // Create keyword arrays from selected defaults
+      const keywordsToAdd = Array.from(selectedDefaultKeywords);
+      const promises = keywordsToAdd.map(keywordSet =>
+        apiClient.addUserKeywords({
+          primary_keywords: [keywordSet], // Individual keyword as array
           industry: bulkAddIndustry,
           track_sentiment: true,
           min_engagement: 50,
@@ -210,104 +191,105 @@ export function TwitterHashtagManager() {
 
       await Promise.all(promises);
       
-      toast.success(`Successfully added ${hashtagsToAdd.length} hashtags to ${INDUSTRY_LABELS[bulkAddIndustry]}`);
+      toast.success(`Successfully added ${keywordsToAdd.length} keyword sets to ${INDUSTRY_LABELS[bulkAddIndustry]}`);
       
       setShowBulkAddDialog(false);
       setBulkAddIndustry('');
-      setSelectedDefaultHashtags(new Set());
-      await loadHashtags();
+      setSelectedDefaultKeywords(new Set());
+      await loadKeywords();
       
       // Notify parent component to refresh source configuration
-      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
+      window.dispatchEvent(new CustomEvent('keyword-config-changed'));
     } catch (error) {
-      console.error('Error bulk adding hashtags:', error);
-      toast.error("Failed to add hashtags");
+      console.error('Error bulk adding keywords:', error);
+      toast.error("Failed to add keywords");
     }
   };
 
-  const handleEditHashtag = async () => {
-    if (!editingHashtag) return;
+  const handleEditKeywords = async () => {
+    if (!editingKeywords) return;
 
     try {
-      await apiClient.updateUserHashtag(editingHashtag.id, {
-        track_sentiment: editingHashtag.track_sentiment,
-        min_engagement: editingHashtag.min_engagement,
-        exclude_retweets: editingHashtag.exclude_retweets,
-        exclude_replies: editingHashtag.exclude_replies,
-        language_filter: editingHashtag.language_filter,
-        include_keywords: editingHashtag.include_keywords,
-        exclude_keywords: editingHashtag.exclude_keywords
+      await apiClient.updateUserKeywords(editingKeywords.id, {
+        primary_keywords: editingKeywords.primary_keywords,
+        track_sentiment: editingKeywords.track_sentiment,
+        min_engagement: editingKeywords.min_engagement,
+        exclude_retweets: editingKeywords.exclude_retweets,
+        exclude_replies: editingKeywords.exclude_replies,
+        language_filter: editingKeywords.language_filter,
+        include_keywords: editingKeywords.include_keywords,
+        exclude_keywords: editingKeywords.exclude_keywords
       });
 
-      toast.success("Hashtag settings updated");
+      toast.success("Keywords updated");
       setShowEditDialog(false);
-      setEditingHashtag(null);
-      await loadHashtags();
+      setEditingKeywords(null);
+      await loadKeywords();
     } catch (error) {
-      console.error('Error updating hashtag:', error);
-      toast.error("Failed to update hashtag");
+      console.error('Error updating keywords:', error);
+      toast.error("Failed to update keywords");
     }
   };
 
-  const handleDeleteHashtag = async (hashtagId: string, hashtag: string) => {
+  const handleDeleteKeywords = async (keywordsId: string, keywordsDesc: string) => {
     try {
-      await apiClient.deleteUserHashtag(hashtagId);
-      toast.success(`Removed ${hashtag}`);
-      await loadHashtags();
+      await apiClient.deleteUserKeywords(keywordsId);
+      toast.success(`Removed ${keywordsDesc}`);
+      await loadKeywords();
       
       // Notify parent component to refresh source configuration
-      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
+      window.dispatchEvent(new CustomEvent('keyword-config-changed'));
     } catch (error) {
-      console.error('Error deleting hashtag:', error);
-      toast.error("Failed to remove hashtag");
+      console.error('Error deleting keywords:', error);
+      toast.error("Failed to remove keywords");
     }
   };
 
-  const handleToggleHashtag = async (hashtagId: string, enabled: boolean) => {
-    // Check if hashtag has a valid ID
-    if (!hashtagId || hashtagId === 'undefined' || hashtagId === 'null') {
-      console.error('Invalid hashtag ID:', hashtagId);
-      toast.error("Cannot update hashtag: Invalid ID. Please refresh the page.");
+  const handleToggleKeywords = async (keywordsId: string, enabled: boolean) => {
+    // Check if keywords has a valid ID
+    if (!keywordsId || keywordsId === 'undefined' || keywordsId === 'null') {
+      console.error('Invalid keywords ID:', keywordsId);
+      toast.error("Cannot update keywords: Invalid ID. Please refresh the page.");
       return;
     }
 
     // Optimistically update the UI immediately
-    setHashtags(prev => 
-      prev.map(hashtag => 
-        hashtag.id === hashtagId 
-          ? { ...hashtag, enabled }
-          : hashtag
+    setKeywords(prev => 
+      prev.map(keywords => 
+        keywords.id === keywordsId 
+          ? { ...keywords, enabled }
+          : keywords
       )
     );
 
     try {
-      const response = await apiClient.toggleHashtag(hashtagId, enabled);
+      const response = await apiClient.toggleKeywords(keywordsId, enabled);
       console.log('Toggle response:', response);
       toast.success(response.message);
       
-      // Update state with the response from toggle endpoint
-      if (response.hashtag) {
-        setHashtags(prev => 
-          prev.map(hashtag => 
-            hashtag.id === response.hashtag.id 
-              ? { ...hashtag, enabled: response.hashtag.enabled }
-              : hashtag
+      // Update state with the response
+      if (response.keywords) {
+        setKeywords(prev => 
+          prev.map(keywords => 
+            keywords.id === response.keywords.id 
+              ? { ...keywords, enabled: response.keywords.enabled }
+              : keywords
           )
         );
       }
       
       // Notify parent component to refresh source configuration
-      window.dispatchEvent(new CustomEvent('hashtag-config-changed'));
+      window.dispatchEvent(new CustomEvent('keyword-config-changed'));
     } catch (error) {
-      console.error('Error toggling hashtag:', error);
-      toast.error("Failed to update hashtag status");
+      console.error('Error toggling keywords:', error);
+      toast.error("Failed to update keywords status");
       
       // Revert the optimistic update on error
-      setHashtags(prev => 
-        prev.map(hashtag => 
-          hashtag.id === hashtagId 
-            ? { ...hashtag, enabled: !enabled }
-            : hashtag
+      setKeywords(prev => 
+        prev.map(keywords => 
+          keywords.id === keywordsId 
+            ? { ...keywords, enabled: !enabled }
+            : keywords
         )
       );
     }
@@ -325,16 +307,37 @@ export function TwitterHashtagManager() {
     });
   };
 
-  const getHashtagsByIndustry = (industry: string) => {
-    return hashtags.filter(hashtag => hashtag.industry === industry);
+  const handleOptimizeKeywords = async (keywordsId: string, keywordsDesc: string) => {
+    try {
+      const response = await apiClient.optimizeKeywords(keywordsId);
+      toast.success(
+        `🚀 Successfully optimized ${keywordsDesc}!`,
+        {
+          description: `New keywords: ${response.keywords.primary_keywords.join(', ')}`,
+          duration: 5000,
+        }
+      );
+      await loadKeywords();
+    } catch (error) {
+      console.error('Error optimizing keywords:', error);
+      toast.error("Failed to optimize keywords");
+    }
   };
 
+  const getKeywordsByIndustry = (industry: string) => {
+    return keywords.filter(keywords => keywords.industry === industry);
+  };
+
+  const getKeywordsDescription = (keywordsItem: TwitterKeywords) => {
+    return keywordsItem.primary_keywords.slice(0, 3).join(', ') + 
+           (keywordsItem.primary_keywords.length > 3 ? '...' : '');
+  };
 
   if (loading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Twitter/X Hashtag Management</CardTitle>
+          <CardTitle>Twitter/X Keyword Management</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -356,11 +359,11 @@ export function TwitterHashtagManager() {
       <CardHeader>
         <div>
           <CardTitle className="flex items-center gap-2">
-            <Hash className="h-5 w-5" />
-            Twitter/X Hashtag Management
+            <Tag className="h-5 w-5" />
+            Twitter/X Keyword Management
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1 mb-3">
-            Monitor hashtags for trending topics and conversations across industries
+            Monitor keywords for trending topics and conversations across industries
           </p>
           <div className="flex gap-2">
             <Dialog open={showBulkAddDialog} onOpenChange={setShowBulkAddDialog}>
@@ -372,7 +375,7 @@ export function TwitterHashtagManager() {
               </DialogTrigger>
               <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Add Popular Hashtags</DialogTitle>
+                  <DialogTitle>Add Popular Keywords</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
@@ -394,88 +397,42 @@ export function TwitterHashtagManager() {
                   {bulkAddIndustry && (
                     <>
                       <div>
-                        <Label>Add Custom Hashtag</Label>
-                        <div className="flex gap-2 mt-2">
-                          <Input
-                            placeholder="#customhashtag"
-                            value={addFormData.hashtag}
-                            onChange={(e) => setAddFormData(prev => ({ ...prev, hashtag: e.target.value }))}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                const hashtag = addFormData.hashtag.startsWith('#') 
-                                  ? addFormData.hashtag 
-                                  : `#${addFormData.hashtag}`;
-                                if (hashtag.length > 1) {
-                                  const newSet = new Set(selectedDefaultHashtags);
-                                  newSet.add(hashtag);
-                                  setSelectedDefaultHashtags(newSet);
-                                  setAddFormData(prev => ({ ...prev, hashtag: '' }));
-                                }
-                              }
-                            }}
-                          />
-                          <Button 
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              const hashtag = addFormData.hashtag.startsWith('#') 
-                                ? addFormData.hashtag 
-                                : `#${addFormData.hashtag}`;
-                              if (hashtag.length > 1) {
-                                const newSet = new Set(selectedDefaultHashtags);
-                                newSet.add(hashtag);
-                                setSelectedDefaultHashtags(newSet);
-                                setAddFormData(prev => ({ ...prev, hashtag: '' }));
-                              }
-                            }}
-                            disabled={!addFormData.hashtag.trim()}
-                          >
-                            Add
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Type a hashtag and press Enter or click Add
-                        </p>
-                      </div>
-
-                      <div>
-                        <Label>Popular Hashtags for {INDUSTRY_LABELS[bulkAddIndustry]}</Label>
+                        <Label>Popular Keywords for {INDUSTRY_LABELS[bulkAddIndustry]}</Label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                          {DEFAULT_HASHTAGS[bulkAddIndustry]?.map((hashtag) => (
-                            <div key={hashtag} className="flex items-center space-x-2">
+                          {DEFAULT_KEYWORDS[bulkAddIndustry]?.map((keyword) => (
+                            <div key={keyword} className="flex items-center space-x-2">
                               <Checkbox
-                                checked={selectedDefaultHashtags.has(hashtag)}
+                                checked={selectedDefaultKeywords.has(keyword)}
                                 onCheckedChange={(checked) => {
-                                  const newSet = new Set(selectedDefaultHashtags);
+                                  const newSet = new Set(selectedDefaultKeywords);
                                   if (checked) {
-                                    newSet.add(hashtag);
+                                    newSet.add(keyword);
                                   } else {
-                                    newSet.delete(hashtag);
+                                    newSet.delete(keyword);
                                   }
-                                  setSelectedDefaultHashtags(newSet);
+                                  setSelectedDefaultKeywords(newSet);
                                 }}
                                 className="h-4 w-4"
                               />
-                              <span className="text-sm">{hashtag}</span>
+                              <span className="text-sm">{keyword}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {selectedDefaultHashtags.size > 0 && (
+                      {selectedDefaultKeywords.size > 0 && (
                         <div>
-                          <Label>Selected Hashtags ({selectedDefaultHashtags.size})</Label>
+                          <Label>Selected Keywords ({selectedDefaultKeywords.size})</Label>
                           <div className="flex flex-wrap gap-2 mt-2 p-2 border rounded-md bg-muted/50">
-                            {Array.from(selectedDefaultHashtags).map((hashtag) => (
-                              <Badge key={hashtag} variant="secondary" className="text-xs">
-                                {hashtag}
+                            {Array.from(selectedDefaultKeywords).map((keyword) => (
+                              <Badge key={keyword} variant="secondary" className="text-xs">
+                                {keyword}
                                 <button
                                   className="ml-1 hover:text-red-500"
                                   onClick={() => {
-                                    const newSet = new Set(selectedDefaultHashtags);
-                                    newSet.delete(hashtag);
-                                    setSelectedDefaultHashtags(newSet);
+                                    const newSet = new Set(selectedDefaultKeywords);
+                                    newSet.delete(keyword);
+                                    setSelectedDefaultKeywords(newSet);
                                   }}
                                 >
                                   ×
@@ -492,8 +449,8 @@ export function TwitterHashtagManager() {
                     <Button variant="outline" onClick={() => setShowBulkAddDialog(false)} className="w-full sm:w-auto">
                       Cancel
                     </Button>
-                    <Button onClick={handleBulkAddHashtags} className="w-full sm:w-auto">
-                      Add Selected ({selectedDefaultHashtags.size})
+                    <Button onClick={handleBulkAddKeywords} className="w-full sm:w-auto">
+                      Add Selected ({selectedDefaultKeywords.size})
                     </Button>
                   </div>
                 </div>
@@ -509,16 +466,17 @@ export function TwitterHashtagManager() {
               </DialogTrigger>
               <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Add Custom Hashtag</DialogTitle>
+                  <DialogTitle>Add Custom Keywords</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="hashtag">Hashtag</Label>
-                    <Input
-                      id="hashtag"
-                      placeholder="#example"
-                      value={addFormData.hashtag}
-                      onChange={(e) => setAddFormData(prev => ({ ...prev, hashtag: e.target.value }))}
+                    <Label htmlFor="primary-keywords">Primary Keywords</Label>
+                    <TagInput
+                      value={addFormData.primary_keywords}
+                      onChange={(keywords) => setAddFormData(prev => ({ ...prev, primary_keywords: keywords }))}
+                      placeholder="Enter keywords (e.g., ChatGPT, artificial intelligence)"
+                      suggestions={addFormData.industry ? DEFAULT_KEYWORDS[addFormData.industry] || [] : []}
+                      maxTags={10}
                     />
                   </div>
                   
@@ -578,8 +536,8 @@ export function TwitterHashtagManager() {
                     <Button variant="outline" onClick={() => setShowAddDialog(false)} className="w-full sm:w-auto">
                       Cancel
                     </Button>
-                    <Button onClick={handleAddHashtag} className="w-full sm:w-auto">
-                      Add Hashtag
+                    <Button onClick={handleAddKeywords} className="w-full sm:w-auto">
+                      Add Keywords
                     </Button>
                   </div>
                 </div>
@@ -592,36 +550,56 @@ export function TwitterHashtagManager() {
       <CardContent>
         <div className="space-y-6">
           {/* Industry sections */}
-          {INDUSTRIES.filter((industry) => getHashtagsByIndustry(industry).length > 0).map((industry) => {
-            const industryHashtags = getHashtagsByIndustry(industry);
-            const visibleHashtags = expandedIndustries.has(industry) 
-              ? industryHashtags 
-              : industryHashtags.slice(0, 5);
+          {INDUSTRIES.filter((industry) => getKeywordsByIndustry(industry).length > 0).map((industry) => {
+            const industryKeywords = getKeywordsByIndustry(industry);
+            const visibleKeywords = expandedIndustries.has(industry) 
+              ? industryKeywords 
+              : industryKeywords.slice(0, 5);
 
             return (
               <div key={industry} className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-sm">{INDUSTRY_LABELS[industry]}</h3>
                   <Badge variant="secondary" className="text-xs">
-                    {industryHashtags.length} hashtags
+                    {industryKeywords.length} keyword sets
                   </Badge>
                 </div>
                 
                 <div className="space-y-2">
-                  {visibleHashtags.map((hashtag) => (
-                    <div key={hashtag.id} className="flex items-center justify-between p-3 border rounded">
-                      <div className="flex items-center gap-2">
+                  {visibleKeywords.map((keywordsItem) => (
+                    <div key={keywordsItem.id} className="flex items-center justify-between p-3 border rounded">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
                         <input 
                           className="rounded h-4 w-4 cursor-pointer" 
                           type="checkbox" 
-                          checked={hashtag.enabled}
-                          onChange={(e) => handleToggleHashtag(hashtag.id, e.target.checked)}
+                          checked={keywordsItem.enabled}
+                          onChange={(e) => handleToggleKeywords(keywordsItem.id, e.target.checked)}
                         />
-                        <span className="text-sm font-medium">{hashtag.hashtag}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium">{getKeywordsDescription(keywordsItem)}</span>
+                            <Badge className="text-xs bg-green-100 text-green-800 border-green-200">
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              Keywords
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {keywordsItem.primary_keywords.slice(0, 3).map((keyword, index) => (
+                              <Badge key={index} variant="outline" className="text-xs text-green-600 border-green-200">
+                                {keyword}
+                              </Badge>
+                            ))}
+                            {keywordsItem.primary_keywords.length > 3 && (
+                              <Badge variant="outline" className="text-xs text-gray-500">
+                                +{keywordsItem.primary_keywords.length - 3} more
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={hashtag.enabled ? "default" : "secondary"} className="text-xs">
-                          {hashtag.enabled ? 'Active' : 'Disabled'}
+                      <div className="flex items-center gap-2 ml-2">
+                        <Badge variant={keywordsItem.enabled ? "default" : "secondary"} className="text-xs">
+                          {keywordsItem.enabled ? 'Active' : 'Disabled'}
                         </Badge>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -631,15 +609,22 @@ export function TwitterHashtagManager() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => {
-                              setEditingHashtag(hashtag);
+                              setEditingKeywords(keywordsItem);
                               setShowEditDialog(true);
                             }}>
                               <Edit className="h-4 w-4 mr-2" />
                               Edit Settings
                             </DropdownMenuItem>
-                            {hashtag.is_custom && (
+                            <DropdownMenuItem 
+                              onClick={() => handleOptimizeKeywords(keywordsItem.id, getKeywordsDescription(keywordsItem))}
+                              className="text-blue-600"
+                            >
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Optimize Keywords
+                            </DropdownMenuItem>
+                            {keywordsItem.is_custom && (
                               <DropdownMenuItem 
-                                onClick={() => handleDeleteHashtag(hashtag.id, hashtag.hashtag)}
+                                onClick={() => handleDeleteKeywords(keywordsItem.id, getKeywordsDescription(keywordsItem))}
                                 className="text-red-600"
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
@@ -652,14 +637,14 @@ export function TwitterHashtagManager() {
                     </div>
                   ))}
                   
-                  {industryHashtags.length > 5 && (
+                  {industryKeywords.length > 5 && (
                     <button
                       onClick={() => toggleIndustryExpansion(industry)}
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer p-2"
                     >
                       {expandedIndustries.has(industry) 
                         ? 'Show less' 
-                        : `+${industryHashtags.length - 5} more hashtags...`
+                        : `+${industryKeywords.length - 5} more keyword sets...`
                       }
                     </button>
                   )}
@@ -668,16 +653,16 @@ export function TwitterHashtagManager() {
             );
           })}
 
-          {hashtags.length === 0 && (
+          {keywords.length === 0 && (
             <div className="text-center py-8">
-              <Hash className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="font-semibold mb-2">No hashtags configured</h3>
+              <Tag className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="font-semibold mb-2">No keywords configured</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Start by adding hashtags to monitor for trending topics
+                Start by adding keywords to monitor for trending topics
               </p>
               <Button onClick={() => setShowBulkAddDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Your First Hashtags
+                Add Your First Keywords
               </Button>
             </div>
           )}
@@ -687,27 +672,52 @@ export function TwitterHashtagManager() {
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
           <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Hashtag Settings</DialogTitle>
+              <DialogTitle>Edit Keywords Settings</DialogTitle>
             </DialogHeader>
-            {editingHashtag && (
+            {editingKeywords && (
               <div className="space-y-4">
                 <div>
-                  <Label>Hashtag</Label>
-                  <Input value={editingHashtag.hashtag} disabled />
+                  <Label>Primary Keywords</Label>
+                  <TagInput
+                    value={editingKeywords.primary_keywords}
+                    onChange={(keywords) => setEditingKeywords(prev => prev ? { ...prev, primary_keywords: keywords } : null)}
+                    placeholder="Enter keywords"
+                    maxTags={10}
+                  />
+                </div>
+
+                <div>
+                  <Label>Include Keywords</Label>
+                  <TagInput
+                    value={editingKeywords.include_keywords}
+                    onChange={(keywords) => setEditingKeywords(prev => prev ? { ...prev, include_keywords: keywords } : null)}
+                    placeholder="Additional keywords to include"
+                    maxTags={10}
+                  />
+                </div>
+
+                <div>
+                  <Label>Exclude Keywords</Label>
+                  <TagInput
+                    value={editingKeywords.exclude_keywords}
+                    onChange={(keywords) => setEditingKeywords(prev => prev ? { ...prev, exclude_keywords: keywords } : null)}
+                    placeholder="Keywords to exclude"
+                    maxTags={10}
+                  />
                 </div>
 
                 <div>
                   <Label>Minimum Engagement</Label>
                   <div className="space-y-2">
                     <Slider
-                      value={[editingHashtag.min_engagement]}
-                      onValueChange={([value]) => setEditingHashtag(prev => prev ? { ...prev, min_engagement: value } : null)}
+                      value={[editingKeywords.min_engagement]}
+                      onValueChange={([value]) => setEditingKeywords(prev => prev ? { ...prev, min_engagement: value } : null)}
                       min={10}
                       max={1000}
                       step={10}
                     />
                     <div className="text-sm text-muted-foreground">
-                      {editingHashtag.min_engagement} minimum likes/retweets
+                      {editingKeywords.min_engagement} minimum likes/retweets
                     </div>
                   </div>
                 </div>
@@ -715,8 +725,8 @@ export function TwitterHashtagManager() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex items-center space-x-2">
                     <Switch
-                      checked={editingHashtag.track_sentiment}
-                      onCheckedChange={(checked) => setEditingHashtag(prev => prev ? { ...prev, track_sentiment: checked } : null)}
+                      checked={editingKeywords.track_sentiment}
+                      onCheckedChange={(checked) => setEditingKeywords(prev => prev ? { ...prev, track_sentiment: checked } : null)}
                       className="scale-75"
                     />
                     <Label>Track Sentiment</Label>
@@ -724,8 +734,8 @@ export function TwitterHashtagManager() {
                   
                   <div className="flex items-center space-x-2">
                     <Switch
-                      checked={editingHashtag.exclude_retweets}
-                      onCheckedChange={(checked) => setEditingHashtag(prev => prev ? { ...prev, exclude_retweets: checked } : null)}
+                      checked={editingKeywords.exclude_retweets}
+                      onCheckedChange={(checked) => setEditingKeywords(prev => prev ? { ...prev, exclude_retweets: checked } : null)}
                       className="scale-75"
                     />
                     <Label>Exclude Retweets</Label>
@@ -734,8 +744,8 @@ export function TwitterHashtagManager() {
 
                 <div className="flex items-center space-x-2">
                   <Switch
-                    checked={editingHashtag.exclude_replies}
-                    onCheckedChange={(checked) => setEditingHashtag(prev => prev ? { ...prev, exclude_replies: checked } : null)}
+                    checked={editingKeywords.exclude_replies}
+                    onCheckedChange={(checked) => setEditingKeywords(prev => prev ? { ...prev, exclude_replies: checked } : null)}
                     className="scale-75"
                   />
                   <Label>Exclude Replies</Label>
@@ -745,7 +755,7 @@ export function TwitterHashtagManager() {
                   <Button variant="outline" onClick={() => setShowEditDialog(false)} className="w-full sm:w-auto">
                     Cancel
                   </Button>
-                  <Button onClick={handleEditHashtag} className="w-full sm:w-auto">
+                  <Button onClick={handleEditKeywords} className="w-full sm:w-auto">
                     Save Changes
                   </Button>
                 </div>

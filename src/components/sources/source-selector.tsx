@@ -62,7 +62,9 @@ export function SourceSelector({
   });
   const [hashtagsInfo, setHashtagsInfo] = useState({
     enabled_hashtags_count: 0,
-    available_hashtags_count: 0
+    available_hashtags_count: 0,
+    using_trending_keywords: 0,
+    custom_trending_keywords: 0
   });
 
   useEffect(() => {
@@ -101,7 +103,9 @@ export function SourceSelector({
           });
           setHashtagsInfo({
             enabled_hashtags_count: data.enabled_hashtags_count || 0,
-            available_hashtags_count: data.available_hashtags_count || 0
+            available_hashtags_count: data.available_hashtags_count || 0,
+            using_trending_keywords: data.using_trending_keywords || 0,
+            custom_trending_keywords: data.custom_trending_keywords || 0
           });
         } else {
           throw new Error('Invalid source configuration response');
@@ -202,7 +206,10 @@ export function SourceSelector({
       case 'twitter':
         return 'Twitter/X social media monitoring';
       case 'hashtags':
-        return `Hashtag monitoring (${hashtagsInfo.enabled_hashtags_count}/${hashtagsInfo.available_hashtags_count} hashtags enabled)`;
+        const trendingRatio = hashtagsInfo.available_hashtags_count > 0 
+          ? Math.round((hashtagsInfo.using_trending_keywords / hashtagsInfo.available_hashtags_count) * 100)
+          : 0;
+        return `Hashtag monitoring (${hashtagsInfo.enabled_hashtags_count}/${hashtagsInfo.available_hashtags_count} enabled, ${trendingRatio}% using trending keywords)`;
       default:
         return '';
     }
@@ -270,9 +277,16 @@ export function SourceSelector({
                     </Badge>
                   )}
                   {sourceType === 'hashtags' && (
-                    <Badge variant="secondary" className="text-xs">
-                      {hashtagsInfo.enabled_hashtags_count}
-                    </Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge variant="secondary" className="text-xs">
+                        {hashtagsInfo.enabled_hashtags_count}
+                      </Badge>
+                      {hashtagsInfo.using_trending_keywords > 0 && (
+                        <Badge className="text-xs bg-blue-100 text-blue-800 border-blue-200">
+                          🚀 {hashtagsInfo.using_trending_keywords}
+                        </Badge>
+                      )}
+                    </div>
                   )}
                 </label>
               )) : (
@@ -334,9 +348,16 @@ export function SourceSelector({
                       )}
                       
                       {sourceType === 'hashtags' && (
-                        <Badge variant="secondary" className="text-xs">
-                          {hashtagsInfo.enabled_hashtags_count}/{hashtagsInfo.available_hashtags_count} hashtags
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="secondary" className="text-xs">
+                            {hashtagsInfo.enabled_hashtags_count}/{hashtagsInfo.available_hashtags_count} hashtags
+                          </Badge>
+                          {hashtagsInfo.using_trending_keywords > 0 && (
+                            <Badge className="text-xs bg-blue-100 text-blue-800 border-blue-200">
+                              🚀 {hashtagsInfo.using_trending_keywords} trending
+                            </Badge>
+                          )}
+                        </div>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">

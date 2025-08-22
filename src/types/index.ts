@@ -138,18 +138,86 @@ export interface TrendSource {
   platform: string;
   url: string;
   title: string;
-  engagement_score: number;
+  engagement_score: number;  // Legacy field for backward compatibility
   mentions: number;
   sentiment?: number;
   author?: string;
   published_at?: string;
+  
+  // Enhanced Twitter/X fields
+  id?: string;  // Tweet ID for Twitter sources
+  text?: string;  // Tweet text content
+  created_at?: string;  // Tweet creation timestamp
+  language?: string;  // Tweet language
+  source?: string;  // Tweet source (e.g., "Twitter for Android")
+  
+  // Author information (for Twitter)
+  author_info?: {
+    username: string;
+    display_name: string;
+    verified: boolean;
+    followers_count: number;
+    profile_image_url?: string;
+    description?: string;
+    location?: string;
+  };
+  
+  // Enhanced engagement metrics (for Twitter)
+  metrics?: {
+    like_count: number;
+    retweet_count: number;
+    reply_count: number;
+    quote_count: number;
+    bookmarks: number;
+    views: number;
+    total_engagement: number;
+  };
+  
+  // Tweet entities (for Twitter)
+  entities?: {
+    hashtags: string[];
+    urls: Array<{
+      url: string;
+      expanded_url: string;
+      display_url: string;
+    }>;
+    user_mentions: Array<{
+      username: string;
+      name: string;
+    }>;
+  };
+  
+  // Media attachments (for Twitter)
+  media?: {
+    photo?: Array<{
+      media_url_https: string;
+      sizes: {
+        h: number;
+        w: number;
+      };
+    }>;
+    video?: Array<{
+      media_url_https: string;
+      sizes: {
+        h: number;
+        w: number;
+      };
+    }>;
+  };
+  
+  // Quality indicators (for Twitter)
+  quality_score?: number;  // 0-10 scale
+  is_viral?: boolean;
 }
 
 export interface TrendMetrics {
   search_volume: number;
   trend_velocity: number;
-  engagement_rate: number;
+  engagement_rate: number;        // 0-100 scale (e.g., 2.33 for 2.33%)
   sentiment_score: number;
+  total_engagement: number;       // Raw engagement count
+  total_reach: number;           // Raw reach number
+  reach_display: string;         // Formatted for UI: "150K", "1.2M", etc.
   geographic_distribution?: Record<string, number>;
   age_demographics?: Record<string, number>;
   competition_level?: number;
@@ -193,6 +261,17 @@ export interface TrendFilters {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   source?: string;
+  
+  // Enhanced Twitter filtering options
+  verifiedOnly?: boolean;
+  minViews?: number;
+  maxViews?: number;
+  minEngagement?: number;
+  maxEngagement?: number;
+  minQualityScore?: number;
+  maxQualityScore?: number;
+  viralOnly?: boolean;
+  hasMedia?: boolean;
 }
 
 export interface TrendSelectionRequest {
@@ -279,7 +358,28 @@ export interface CustomCategoryMappingCreate {
   industries: string[];
 }
 
-// Twitter/X hashtag monitoring types
+// Twitter/X keyword monitoring types  
+export interface UserKeywords {
+  id: string;
+  primary_keywords: string[];        // Main keywords (e.g., ["AI", "artificial intelligence"])
+  industry: string;
+  enabled: boolean;
+  is_custom: boolean;
+  track_sentiment: boolean;
+  min_engagement: number;
+  exclude_retweets: boolean;
+  exclude_replies: boolean;
+  language_filter?: string;
+  include_keywords: string[];        // Additional filtering keywords
+  exclude_keywords: string[];        // Keywords to avoid
+  trends_discovered: number;
+  avg_trend_score: number;
+  last_fetch_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Legacy hashtag interface for backward compatibility
 export interface UserHashtag {
   id: string;
   hashtag: string;
@@ -298,15 +398,70 @@ export interface UserHashtag {
   last_fetch_at?: string;
   created_at: string;
   updated_at: string;
+  
+  // Trending keywords support
+  use_trending_keywords: boolean;    // Default: true for new hashtags
+  trending_keywords?: string;        // Optional custom trending keywords query
 }
 
 export interface TwitterSourceConfig {
   enabled: boolean;
   weight: number;
-  max_hashtags_per_industry: number;
+  max_keywords_per_industry: number;
   default_min_engagement: number;
   default_language_filter: string;
   rate_limit_per_hour: number;
+}
+
+// Keyword examples and statistics
+export interface KeywordExample {
+  old_hashtag?: string;              // For showing transformation examples
+  primary_keywords: string[];        // New keyword array
+  engagement_improvement: string;
+  industry?: string;
+}
+
+export interface KeywordStats {
+  total_keywords: number;
+  active_keywords: number;
+  custom_keywords: number;
+  avg_engagement_improvement: number;
+}
+
+export interface KeywordOptimizationResponse {
+  success: boolean;
+  message: string;
+  keywords: {
+    id: string;
+    primary_keywords: string[];
+    optimized: boolean;
+  };
+}
+
+// Legacy types for backward compatibility
+export interface TrendingKeywordsExample {
+  hashtag: string;
+  trending_keywords: string;
+  engagement_improvement: string;
+  industry?: string;
+}
+
+export interface TrendingKeywordsStats {
+  total_hashtags: number;
+  using_trending_keywords: number;
+  custom_trending_keywords: number;
+  avg_engagement_improvement: number;
+}
+
+export interface HashtagConversionResponse {
+  success: boolean;
+  message: string;
+  hashtag: {
+    id: string;
+    hashtag: string;
+    trending_keywords: string;
+    use_trending_keywords: boolean;
+  };
 }
 
 // Updated source configuration to include Twitter
@@ -327,7 +482,7 @@ export interface SourceConfiguration {
     enabled_feed_ids: string[];
   };
   twitter_preferences?: {
-    enabled_hashtag_ids: string[];
+    enabled_keyword_ids: string[];
   };
   max_trends_per_source: number;
 }

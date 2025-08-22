@@ -38,6 +38,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { TwitterTrendCard } from "@/components/trends/twitter-trend-card";
 
 interface PostDetailProps {
   postId: string;
@@ -494,34 +495,81 @@ export function PostDetail({ postId }: PostDetailProps) {
               sourcesCollapsed ? 'max-h-0 overflow-hidden' : 'max-h-[1000px]'
             }`}>
               <CardContent className="space-y-3">
-                {post.sources.map((source, index) => (
-                  <div
-                    key={index}
-                    className="border rounded-lg p-3 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-sm leading-tight">
-                        {source.title}
-                      </h4>
-                      <div className="flex items-center justify-end">
-                        <Button variant="ghost" size="sm" asChild>
-                          <a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </Button>
-                      </div>
-                      {source.publishDate && (
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(source.publishDate).toLocaleDateString()}
-                        </p>
+                {post.sources.map((source, index) => {
+                  const isTwitterSource = source.url.includes('twitter.com') || source.url.includes('x.com');
+                  
+                  return (
+                    <div
+                      key={index}
+                      className={cn(
+                        "border rounded-lg p-3 hover:bg-muted/50 transition-colors",
+                        isTwitterSource && "border-l-4 border-l-blue-500 bg-blue-50/50"
                       )}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-medium text-sm leading-tight">
+                                {source.title}
+                              </h4>
+                              {isTwitterSource && (
+                                <Badge className="text-xs bg-blue-100 text-blue-800 border-blue-200">
+                                  🐦 Twitter
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {/* Enhanced Twitter context */}
+                            {isTwitterSource && (
+                              <div className="text-xs text-muted-foreground mb-2">
+                                <p>This content was discovered from trending Twitter conversations</p>
+                              </div>
+                            )}
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                {source.publishDate && (
+                                  <span>
+                                    📅 {new Date(source.publishDate).toLocaleDateString()}
+                                  </span>
+                                )}
+                                {source.credibilityScore && (
+                                  <span className="flex items-center gap-1">
+                                    <span>📊 Credibility:</span>
+                                    <Badge 
+                                      variant="outline" 
+                                      className={cn(
+                                        "text-xs",
+                                        source.credibilityScore >= 8 ? "bg-green-100 text-green-800 border-green-300" :
+                                        source.credibilityScore >= 6 ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
+                                        "bg-red-100 text-red-800 border-red-300"
+                                      )}
+                                    >
+                                      {source.credibilityScore.toFixed(1)}/10
+                                    </Badge>
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <Button variant="ghost" size="sm" asChild>
+                                <a
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  <span className="sr-only">Open source link</span>
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </CardContent>
             </div>
           </Card>

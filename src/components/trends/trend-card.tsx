@@ -46,19 +46,55 @@ export function TrendCard({ trend, selected, onSelect, className }: TrendCardPro
     });
   };
 
-  const totalMentions = trend.sources?.reduce((sum, source) => {
-    // Handle different source data structures
-    const mentions = source.mentions || 0;
-    return sum + mentions;
-  }, 0) || 0;
+  // Legacy mentions calculation (kept for potential future use)
+  // const totalMentions = trend.sources?.reduce((sum, source) => {
+  //   const mentions = source.mentions || 0;
+  //   return sum + mentions;
+  // }, 0) || 0;
   
-  const avgEngagement = trend.sources && trend.sources.length > 0 
-    ? trend.sources.reduce((sum, source) => {
-        // Handle different engagement score structures
-        const engagement = source.engagement_score || 0;
-        return sum + engagement;
-      }, 0) / trend.sources.length 
-    : 0;
+  // Get engagement rate from new metrics structure
+  const getEngagementRate = (): string => {
+    // Use the backend-calculated engagement_rate (already a percentage 0-100)
+    if (trend.metrics?.engagement_rate !== undefined && trend.metrics.engagement_rate !== null && trend.metrics.engagement_rate > 0) {
+      return trend.metrics.engagement_rate.toFixed(1);
+    }
+    
+    // Calculate engagement rate from total_engagement and total_reach if available
+    if (trend.metrics?.total_engagement !== undefined && trend.metrics?.total_reach !== undefined && trend.metrics.total_reach > 0) {
+      const calculatedRate = (trend.metrics.total_engagement / trend.metrics.total_reach) * 100;
+      // Cap at 100% and ensure reasonable values
+      return Math.min(calculatedRate, 100).toFixed(1);
+    }
+    
+    // Handle case where no engagement data is available
+    if (!trend.metrics || trend.metrics?.total_reach === 0) {
+      return "N/A";
+    }
+    
+    return "0.0";
+  };
+  
+  // Get reach display from new metrics structure
+  const getReachDisplay = (): string => {
+    // Use the pre-formatted reach_display field
+    if (trend.metrics?.reach_display) {
+      return trend.metrics.reach_display;
+    }
+    
+    // Fallback to formatted total_reach
+    if (trend.metrics?.total_reach) {
+      const reach = trend.metrics.total_reach;
+      // Format large numbers nicely (e.g., 1.2M, 150K)
+      if (reach >= 1000000) {
+        return `${(reach / 1000000).toFixed(1)}M`;
+      } else if (reach >= 1000) {
+        return `${(reach / 1000).toFixed(reach >= 10000 ? 0 : 1)}K`;
+      }
+      return reach.toLocaleString();
+    }
+    
+    return "0";
+  };
 
   return (
     <Card 
@@ -140,14 +176,14 @@ export function TrendCard({ trend, selected, onSelect, className }: TrendCardPro
           
           <div className="flex items-center gap-1">
             <Users className="h-3 w-3 text-green-500" />
-            <span className="text-muted-foreground">Mentions:</span>
-            <span className="font-medium">{totalMentions.toLocaleString()}</span>
+            <span className="text-muted-foreground">Reach:</span>
+            <span className="font-medium">{getReachDisplay()}</span>
           </div>
           
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3 text-purple-500" />
             <span className="text-muted-foreground">Engagement:</span>
-            <span className="font-medium">{(avgEngagement * 100).toFixed(1)}%</span>
+            <span className="font-medium">{getEngagementRate()}%</span>
           </div>
           
           <div className="flex items-center gap-1">

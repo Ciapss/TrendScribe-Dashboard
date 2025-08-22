@@ -1306,14 +1306,82 @@ class APIClient {
         platform: string
         url: string
         title: string
-        engagement_score: number
+        engagement_score: number  // Legacy field
         mentions: number
+        
+        // Enhanced Twitter fields
+        id?: string
+        text?: string
+        created_at?: string
+        language?: string
+        source?: string
+        
+        // Author information
+        author_info?: {
+          username: string
+          display_name: string
+          verified: boolean
+          followers_count: number
+          profile_image_url?: string
+          description?: string
+          location?: string
+        }
+        
+        // Enhanced metrics
+        metrics?: {
+          like_count: number
+          retweet_count: number
+          reply_count: number
+          quote_count: number
+          bookmarks: number
+          views: number
+          total_engagement: number
+        }
+        
+        // Entities
+        entities?: {
+          hashtags: string[]
+          urls: Array<{
+            url: string
+            expanded_url: string
+            display_url: string
+          }>
+          user_mentions: Array<{
+            username: string
+            name: string
+          }>
+        }
+        
+        // Media
+        media?: {
+          photo?: Array<{
+            media_url_https: string
+            sizes: {
+              h: number
+              w: number
+            }
+          }>
+          video?: Array<{
+            media_url_https: string
+            sizes: {
+              h: number
+              w: number
+            }
+          }>
+        }
+        
+        // Quality indicators
+        quality_score?: number
+        is_viral?: boolean
       }>
       metrics: {
         search_volume: number
         trend_velocity: number
-        engagement_rate: number
+        engagement_rate: number        // 0-100 scale (e.g., 2.33 for 2.33%)
         sentiment_score: number
+        total_engagement: number       // Raw engagement count
+        total_reach: number           // Raw reach number
+        reach_display: string         // Formatted for UI: "150K", "1.2M", etc.
       }
       selected_for_generation?: boolean
     }>
@@ -1394,14 +1462,82 @@ class APIClient {
         platform: string
         url: string
         title: string
-        engagement_score: number
+        engagement_score: number  // Legacy field
         mentions: number
+        
+        // Enhanced Twitter fields
+        id?: string
+        text?: string
+        created_at?: string
+        language?: string
+        source?: string
+        
+        // Author information
+        author_info?: {
+          username: string
+          display_name: string
+          verified: boolean
+          followers_count: number
+          profile_image_url?: string
+          description?: string
+          location?: string
+        }
+        
+        // Enhanced metrics
+        metrics?: {
+          like_count: number
+          retweet_count: number
+          reply_count: number
+          quote_count: number
+          bookmarks: number
+          views: number
+          total_engagement: number
+        }
+        
+        // Entities
+        entities?: {
+          hashtags: string[]
+          urls: Array<{
+            url: string
+            expanded_url: string
+            display_url: string
+          }>
+          user_mentions: Array<{
+            username: string
+            name: string
+          }>
+        }
+        
+        // Media
+        media?: {
+          photo?: Array<{
+            media_url_https: string
+            sizes: {
+              h: number
+              w: number
+            }
+          }>
+          video?: Array<{
+            media_url_https: string
+            sizes: {
+              h: number
+              w: number
+            }
+          }>
+        }
+        
+        // Quality indicators
+        quality_score?: number
+        is_viral?: boolean
       }>
       metrics: {
         search_volume: number
         trend_velocity: number
-        engagement_rate: number
+        engagement_rate: number        // 0-100 scale (e.g., 2.33 for 2.33%)
         sentiment_score: number
+        total_engagement: number       // Raw engagement count
+        total_reach: number           // Raw reach number
+        reach_display: string         // Formatted for UI: "150K", "1.2M", etc.
       }
     }>
     industry: string
@@ -1813,6 +1949,8 @@ class APIClient {
     last_fetch_at?: string
     created_at: string
     updated_at: string
+    use_trending_keywords: boolean
+    trending_keywords?: string
   }>> {
     const url = enabledOnly ? '/user/sources/hashtags' : '/user/sources/hashtags?enabled_only=false'
     const response = await this.request<Array<Record<string, unknown>>>(url, {}, { skipCache: true })
@@ -1823,6 +1961,9 @@ class APIClient {
       return {
         ...hashtag,
         id: hashtagWithId._id || hashtag.id,
+        // Set default values for new trending keywords fields if not present
+        use_trending_keywords: hashtag.use_trending_keywords ?? true,
+        trending_keywords: hashtag.trending_keywords as string | undefined,
       }
     }) as Array<{
       id: string
@@ -1842,6 +1983,8 @@ class APIClient {
       last_fetch_at?: string
       created_at: string
       updated_at: string
+      use_trending_keywords: boolean
+      trending_keywords?: string
     }>
   }
 
@@ -1857,12 +2000,16 @@ class APIClient {
     language_filter?: string
     include_keywords?: string[]
     exclude_keywords?: string[]
+    use_trending_keywords?: boolean
+    trending_keywords?: string
   }): Promise<{
     id: string
     hashtag: string
     industry: string
     enabled: boolean
     is_custom: boolean
+    use_trending_keywords: boolean
+    trending_keywords?: string
   }> {
     try {
       return this.request('/user/sources/hashtags', {
@@ -1884,12 +2031,16 @@ class APIClient {
     language_filter?: string
     include_keywords?: string[]
     exclude_keywords?: string[]
+    use_trending_keywords?: boolean
+    trending_keywords?: string
   }): Promise<{
     id: string
     hashtag: string
     industry: string
     enabled: boolean
     is_custom: boolean
+    use_trending_keywords: boolean
+    trending_keywords?: string
   }> {
     return this.request(`/user/sources/hashtags/${hashtagId}`, {
       method: 'PUT',
@@ -1928,6 +2079,229 @@ class APIClient {
       method: 'POST',
       body: JSON.stringify({ hashtag_id: hashtagId, enabled }),
     }, { skipCache: true })
+  }
+
+  // Trending keywords methods
+  async getTrendingExamples(industry?: string): Promise<{
+    examples: Array<{
+      hashtag: string
+      trending_keywords: string
+      engagement_improvement: string
+      industry?: string
+    }>
+  }> {
+    const queryParams = new URLSearchParams()
+    if (industry) queryParams.append('industry', industry)
+    
+    const url = `/user/sources/hashtags/trending-examples${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+    return this.request(url, {}, { ttl: 300000 }) // Cache for 5 minutes
+  }
+
+  async convertHashtagToTrending(hashtagId: string): Promise<{
+    success: boolean
+    message: string
+    hashtag: {
+      id: string
+      hashtag: string
+      trending_keywords: string
+      use_trending_keywords: boolean
+    }
+  }> {
+    return this.request(`/user/sources/hashtags/${hashtagId}/convert-to-trending`, {
+      method: 'POST',
+    }, { skipCache: true })
+  }
+
+  async getHashtagsStatistics(): Promise<{
+    trending_keywords_stats: {
+      total_hashtags: number
+      using_trending_keywords: number
+      custom_trending_keywords: number
+      avg_engagement_improvement: number
+    }
+  }> {
+    return this.request('/user/sources/statistics', {}, { ttl: 30000 }) // Cache for 30 seconds
+  }
+
+  // NEW: User Keywords Management (Simplified System)
+  async getUserKeywords(enabledOnly: boolean = false): Promise<Array<{
+    id: string
+    primary_keywords: string[]
+    industry: string
+    enabled: boolean
+    is_custom: boolean
+    track_sentiment: boolean
+    min_engagement: number
+    exclude_retweets: boolean
+    exclude_replies: boolean
+    language_filter?: string
+    include_keywords: string[]
+    exclude_keywords: string[]
+    trends_discovered: number
+    avg_trend_score: number
+    last_fetch_at?: string
+    created_at: string
+    updated_at: string
+  }>> {
+    const url = enabledOnly ? '/user/sources/keywords' : '/user/sources/keywords?enabled_only=false'
+    const response = await this.request<Array<Record<string, unknown>>>(url, {}, { skipCache: true })
+    
+    // Transform _id to id for each keyword set
+    return response.map(keywords => {
+      const keywordsWithId = keywords as Record<string, unknown> & { _id?: string }
+      return {
+        ...keywords,
+        id: keywordsWithId._id || keywords.id,
+        primary_keywords: keywords.primary_keywords as string[] || [],
+        include_keywords: keywords.include_keywords as string[] || [],
+        exclude_keywords: keywords.exclude_keywords as string[] || [],
+      }
+    }) as Array<{
+      id: string
+      primary_keywords: string[]
+      industry: string
+      enabled: boolean
+      is_custom: boolean
+      track_sentiment: boolean
+      min_engagement: number
+      exclude_retweets: boolean
+      exclude_replies: boolean
+      language_filter?: string
+      include_keywords: string[]
+      exclude_keywords: string[]
+      trends_discovered: number
+      avg_trend_score: number
+      last_fetch_at?: string
+      created_at: string
+      updated_at: string
+    }>
+  }
+
+  async addUserKeywords(keywordsData: {
+    primary_keywords: string[]
+    industry: string
+    enabled?: boolean
+    is_custom?: boolean
+    track_sentiment?: boolean
+    min_engagement?: number
+    exclude_retweets?: boolean
+    exclude_replies?: boolean
+    language_filter?: string
+    include_keywords?: string[]
+    exclude_keywords?: string[]
+  }): Promise<{
+    id: string
+    primary_keywords: string[]
+    industry: string
+    enabled: boolean
+    is_custom: boolean
+  }> {
+    try {
+      return this.request('/user/sources/keywords', {
+        method: 'POST',
+        body: JSON.stringify(keywordsData),
+      }, { skipCache: true })
+    } catch (error) {
+      console.error('Error in addUserKeywords:', error)
+      throw error
+    }
+  }
+
+  async updateUserKeywords(keywordsId: string, updateData: {
+    enabled?: boolean
+    primary_keywords?: string[]
+    track_sentiment?: boolean
+    min_engagement?: number
+    exclude_retweets?: boolean
+    exclude_replies?: boolean
+    language_filter?: string
+    include_keywords?: string[]
+    exclude_keywords?: string[]
+  }): Promise<{
+    id: string
+    primary_keywords: string[]
+    industry: string
+    enabled: boolean
+    is_custom: boolean
+  }> {
+    return this.request(`/user/sources/keywords/${keywordsId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    }, { skipCache: true })
+  }
+
+  async deleteUserKeywords(keywordsId: string): Promise<void> {
+    await this.request(`/user/sources/keywords/${keywordsId}`, {
+      method: 'DELETE',
+    }, { skipCache: true })
+  }
+
+  async bulkUpdateKeywords(updates: Array<{
+    keywords_id: string
+    enabled: boolean
+  }>): Promise<{
+    success: boolean
+    updated_count: number
+  }> {
+    return this.request('/user/sources/keywords/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ updates }),
+    }, { skipCache: true })
+  }
+
+  async toggleKeywords(keywordsId: string, enabled: boolean): Promise<{
+    message: string
+    keywords: {
+      id: string
+      primary_keywords: string[]
+      enabled: boolean
+    }
+  }> {
+    return this.request('/sources/config/toggle-keywords', {
+      method: 'POST',
+      body: JSON.stringify({ keywords_id: keywordsId, enabled }),
+    }, { skipCache: true })
+  }
+
+  // NEW: Keyword examples and optimization
+  async getKeywordExamples(industry?: string): Promise<{
+    examples: Array<{
+      old_hashtag?: string
+      primary_keywords: string[]
+      engagement_improvement: string
+      industry?: string
+    }>
+  }> {
+    const queryParams = new URLSearchParams()
+    if (industry) queryParams.append('industry', industry)
+    
+    const url = `/user/sources/keywords/examples${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+    return this.request(url, {}, { ttl: 300000 }) // Cache for 5 minutes
+  }
+
+  async optimizeKeywords(keywordsId: string): Promise<{
+    success: boolean
+    message: string
+    keywords: {
+      id: string
+      primary_keywords: string[]
+      optimized: boolean
+    }
+  }> {
+    return this.request(`/user/sources/keywords/${keywordsId}/optimize`, {
+      method: 'POST',
+    }, { skipCache: true })
+  }
+
+  async getKeywordsStatistics(): Promise<{
+    keyword_stats: {
+      total_keywords: number
+      active_keywords: number
+      custom_keywords: number
+      avg_engagement_improvement: number
+    }
+  }> {
+    return this.request('/user/sources/keywords/statistics', {}, { ttl: 30000 }) // Cache for 30 seconds
   }
 }
 

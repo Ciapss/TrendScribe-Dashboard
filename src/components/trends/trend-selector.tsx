@@ -60,35 +60,42 @@ export function TrendSelector({
 
   // Extract unique source types and map them to user-friendly labels
   const sourceTypes = useMemo(() => {
-    const sources = [...new Set(trends.map(trend => trend.collection_source?.toLowerCase()).filter(Boolean))] as string[];
+    // Create a map to count trends by source type
+    const sourceCounts = new Map<string, number>();
     
-    const sourceMap = sources.map(source => {
-      if (source === 'twitter' || source === 'x') return { value: 'hashtag', label: 'Hashtag', count: 0 };
-      if (source === 'reddit') return { value: 'reddit', label: 'Reddit', count: 0 };
-      if (source === 'rss' || source === 'rss_feeds') return { value: 'rss', label: 'RSS', count: 0 };
-      if (source === 'linkup') return { value: 'linkup', label: 'LinkUp', count: 0 };
-      return { value: source, label: source.charAt(0).toUpperCase() + source.slice(1), count: 0 };
+    // Count trends for each source type
+    trends.forEach(trend => {
+      const collectionSource = trend.collection_source?.toLowerCase();
+      if (!collectionSource) return;
+      
+      let sourceType: string;
+      if (collectionSource === 'twitter' || collectionSource === 'x') {
+        sourceType = 'hashtag';
+      } else if (collectionSource === 'reddit') {
+        sourceType = 'reddit';
+      } else if (collectionSource === 'rss' || collectionSource === 'rss_feeds') {
+        sourceType = 'rss';
+      } else if (collectionSource === 'linkup') {
+        sourceType = 'linkup';
+      } else {
+        sourceType = collectionSource;
+      }
+      
+      sourceCounts.set(sourceType, (sourceCounts.get(sourceType) || 0) + 1);
     });
     
-    // Remove duplicates and count occurrences from all trends (not filtered by search)
-    const uniqueSources = sourceMap.reduce((acc, source) => {
-      const existing = acc.find(s => s.value === source.value);
-      if (existing) {
-        existing.count++;
-      } else {
-        source.count = trends.filter(trend => {
-          const collectionSource = trend.collection_source?.toLowerCase();
-          if (source.value === 'hashtag') {
-            return collectionSource === 'twitter' || collectionSource === 'x';
-          }
-          return collectionSource === source.value;
-        }).length;
-        acc.push(source);
-      }
-      return acc;
-    }, [] as Array<{ value: string; label: string; count: number }>);
+    // Convert to array with labels
+    const sourceTypes = Array.from(sourceCounts.entries()).map(([sourceType, count]) => ({
+      value: sourceType,
+      label: sourceType === 'hashtag' ? 'Hashtag' : 
+             sourceType === 'reddit' ? 'Reddit' :
+             sourceType === 'rss' ? 'RSS' :
+             sourceType === 'linkup' ? 'LinkUp' :
+             sourceType.charAt(0).toUpperCase() + sourceType.slice(1),
+      count
+    }));
     
-    return uniqueSources.sort((a, b) => b.count - a.count);
+    return sourceTypes.sort((a, b) => b.count - a.count);
   }, [trends]);
 
 
@@ -141,25 +148,149 @@ export function TrendSelector({
     handleTrendSelect(trendId);
   }, [handleTrendSelect]);
 
-  const calculateEngagement = useCallback((trend: Trend) => {
-    const totalMentions = trend.sources?.reduce((sum, source) => {
-      const mentions = source.mentions || 0;
-      return sum + mentions;
-    }, 0) || 0;
-    
-    // Calculate average engagement as a percentage (0-100)
-    const avgEngagement = trend.sources && trend.sources.length > 0 
-      ? trend.sources.reduce((sum, source) => {
-          const engagement = source.engagement_score || 0;
-          return sum + engagement;
-        }, 0) / trend.sources.length 
-      : 0;
-    
-    // Convert to reasonable percentage if it's too large
-    const normalizedEngagement = avgEngagement > 100 ? (avgEngagement / 1000) : avgEngagement;
-    
-    return { totalMentions, avgEngagement: normalizedEngagement };
+  // Helper functions for statistics display with proper fallbacks
+  const getTrendScore = useCallback((trend: Trend): string => {
+    const score = trend.trend_score ?? 0;
+    return Math.min(Math.max(score, 0), 10).toFixed(1);  // Ensure 0-10 range
   }, []);
+
+  const getReachDisplay = useCallback((trend: Trend): string => {
+    // Debug: Log the first trend's metrics to see what we're getting
+    if (trends.length > 0 && trend.id === trends[0].id) {
+      console.log('Debug - Reach metrics:', {
+        id: trend.id,
+        topic: trend.topic,
+        reach_display: trend.metrics?.reach_display,
+        total_reach: trend.metrics?.total_reach,
+        search_volume: trend.metrics?.search_volume,
+        twitter_sources: trend.sources?.filter(s => 
+          s.platform?.toLowerCase() === 'twitter' || s.platform?.toLowerCase() === 'x'
+        ).length
+      });
+    }
+    
+    // Use the pre-formatted reach_display field (primary method)
+    if (trend.metrics?.reach_display) {
+      return trend.metrics.reach_display;
+    }
+    
+    // Enhanced fallback: Calculate total reach from Twitter views if available
+    const twitterSources = trend.sources?.filter(source => 
+      source.platform?.toLowerCase() === 'twitter' || source.platform?.toLowerCase() === 'x'
+    );
+    
+    if (twitterSources && twitterSources.length > 0) {
+      let totalTwitterViews = 0;
+      let validSources = 0;
+      
+      twitterSources.forEach(source => {
+        if (source.metrics?.views && source.metrics.views > 0) {
+          totalTwitterViews += source.metrics.views;
+          validSources++;
+        }
+      });
+      
+      if (validSources > 0 && totalTwitterViews > 0) {
+        // Format large numbers nicely (e.g., 1.2M, 150K)
+        if (totalTwitterViews >= 1000000) {
+          return `${(totalTwitterViews / 1000000).toFixed(1)}M`;
+        } else if (totalTwitterViews >= 1000) {
+          return `${(totalTwitterViews / 1000).toFixed(0)}K`;
+        }
+        return totalTwitterViews.toLocaleString();
+      }
+    }
+    
+    // Fallback to formatted total_reach if available
+    if (trend.metrics?.total_reach) {
+      return trend.metrics.total_reach.toLocaleString();
+    }
+    
+    // Final fallback to search_volume (legacy compatibility)
+    if (trend.metrics?.search_volume) {
+      return trend.metrics.search_volume.toLocaleString();
+    }
+    
+    return '0';
+  }, [trends]);
+
+  const getEngagementRate = useCallback((trend: Trend): string => {
+    // Debug: Log engagement data for troubleshooting
+    if (trends.length > 0 && trend.id === trends[0].id) {
+      console.log('Debug - Engagement data:', {
+        id: trend.id,
+        topic: trend.topic,
+        engagement_rate: trend.metrics?.engagement_rate,
+        total_engagement: trend.metrics?.total_engagement,
+        total_reach: trend.metrics?.total_reach,
+        sources_count: trend.sources?.length || 0,
+        // Additional debug info
+        has_metrics: !!trend.metrics,
+        trend_score: trend.trend_score
+      });
+      
+      // Log individual source data including new Twitter metrics
+      trend.sources?.forEach((source, idx) => {
+        console.log(`Source ${idx}:`, {
+          platform: source.platform,
+          engagement_score: source.engagement_score,
+          mentions: source.mentions,
+          // Twitter-specific metrics
+          twitter_metrics: source.metrics,
+          author_info: source.author_info,
+          quality_score: source.quality_score,
+          is_viral: source.is_viral
+        });
+      });
+    }
+    
+    // Use the backend-calculated engagement_rate (already a percentage 0-100)
+    if (trend.metrics?.engagement_rate !== undefined && trend.metrics.engagement_rate !== null && trend.metrics.engagement_rate > 0) {
+      const rate = Math.max(trend.metrics.engagement_rate, 0);
+      return rate.toFixed(1);
+    }
+    
+    // Enhanced fallback: Calculate engagement from Twitter sources if available
+    const twitterSources = trend.sources?.filter(source => 
+      source.platform?.toLowerCase() === 'twitter' || source.platform?.toLowerCase() === 'x'
+    );
+    
+    if (twitterSources && twitterSources.length > 0) {
+      // Calculate average engagement rate from Twitter sources
+      let totalEngagement = 0;
+      let totalViews = 0;
+      let validSources = 0;
+      
+      twitterSources.forEach(source => {
+        if (source.metrics?.total_engagement && source.metrics?.views) {
+          totalEngagement += source.metrics.total_engagement;
+          totalViews += source.metrics.views;
+          validSources++;
+        }
+      });
+      
+      if (validSources > 0 && totalViews > 0) {
+        const avgEngagementRate = (totalEngagement / totalViews) * 100;
+        return Math.min(avgEngagementRate, 100).toFixed(1); // Cap at 100%
+      }
+    }
+    
+    // Fallback: Use trend_score as a proxy for engagement
+    // trend_score is typically 0-10, so we'll use a more conservative conversion
+    if (trend.trend_score > 0) {
+      // Convert 0-10 score to a reasonable engagement percentage
+      // Score 10 = ~10% engagement, Score 5 = ~5% engagement
+      const proxyRate = trend.trend_score;
+      return proxyRate.toFixed(1);
+    }
+    
+    // Handle case where no data is available
+    if (!trend.metrics || trend.metrics.total_reach === 0) {
+      return 'N/A';
+    }
+    
+    return '0.0';
+  }, [trends]);
 
   // Filter trends based on search term and source - whole word matching
   const allFilteredTrends = useMemo(() => {
@@ -172,46 +303,109 @@ export function TrendSelector({
         if (filters.source === 'hashtag') {
           return collectionSource === 'twitter' || collectionSource === 'x';
         }
+        if (filters.source === 'rss') {
+          return collectionSource === 'rss' || collectionSource === 'rss_feeds';
+        }
         return collectionSource === filters.source;
       });
     }
     
-    // Then filter by search term
-    if (!filters.search || !filters.search.trim()) {
-      return filtered;
+    // Enhanced Twitter filtering
+    if (filters.verifiedOnly) {
+      filtered = filtered.filter(trend => {
+        return trend.sources?.some(source => 
+          (source.platform?.toLowerCase() === 'twitter' || source.platform?.toLowerCase() === 'x') && 
+          source.author_info?.verified
+        );
+      });
     }
     
-    const searchTerm = filters.search.toLowerCase().trim();
+    if (filters.viralOnly) {
+      filtered = filtered.filter(trend => {
+        return trend.sources?.some(source => source.is_viral);
+      });
+    }
     
-    // Create regex for whole word matching
-    const createWordRegex = (term: string) => {
-      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`\\b${escapedTerm}\\b`, 'i');
-    };
+    if (filters.hasMedia) {
+      filtered = filtered.filter(trend => {
+        return trend.sources?.some(source => 
+          source.media?.photo && source.media.photo.length > 0
+        );
+      });
+    }
     
-    const wordRegex = createWordRegex(searchTerm);
+    if (filters.minViews !== undefined) {
+      filtered = filtered.filter(trend => {
+        const maxViews = Math.max(...(trend.sources?.map(source => 
+          source.metrics?.views || 0
+        ) || [0]));
+        return maxViews >= filters.minViews!;
+      });
+    }
     
-    return filtered.filter(trend => {
-      // Search in topic title (whole words)
-      if (wordRegex.test(trend.topic)) {
-        return true;
-      }
+    if (filters.maxViews !== undefined) {
+      filtered = filtered.filter(trend => {
+        const maxViews = Math.max(...(trend.sources?.map(source => 
+          source.metrics?.views || 0
+        ) || [0]));
+        return maxViews <= filters.maxViews!;
+      });
+    }
+    
+    if (filters.minQualityScore !== undefined) {
+      filtered = filtered.filter(trend => {
+        const maxQuality = Math.max(...(trend.sources?.map(source => 
+          source.quality_score || 0
+        ) || [0]));
+        return maxQuality >= filters.minQualityScore!;
+      });
+    }
+    
+    if (filters.maxQualityScore !== undefined) {
+      filtered = filtered.filter(trend => {
+        const maxQuality = Math.max(...(trend.sources?.map(source => 
+          source.quality_score || 0
+        ) || [0]));
+        return maxQuality <= filters.maxQualityScore!;
+      });
+    }
+    
+    // Then filter by search term
+    if (filters.search && filters.search.trim()) {
+      const searchTerm = filters.search.toLowerCase().trim();
       
-      // Search in description (whole words)
-      if (trend.description && wordRegex.test(trend.description)) {
-        return true;
-      }
+      // Create regex for whole word matching
+      const createWordRegex = (term: string) => {
+        const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escapedTerm}\\b`, 'i');
+      };
       
-      // Search in keywords (exact keyword matches)
-      if (trend.keywords && trend.keywords.some(keyword => 
-        keyword.toLowerCase() === searchTerm || wordRegex.test(keyword)
-      )) {
-        return true;
-      }
+      const wordRegex = createWordRegex(searchTerm);
       
-      return false;
-    });
-  }, [trends, filters.search, filters.source]);
+      filtered = filtered.filter(trend => {
+        // Search in topic title (whole words)
+        if (wordRegex.test(trend.topic)) {
+          return true;
+        }
+        
+        // Search in description (whole words)
+        if (trend.description && wordRegex.test(trend.description)) {
+          return true;
+        }
+        
+        // Search in keywords (exact keyword matches)
+        if (trend.keywords && trend.keywords.some(keyword => 
+          keyword.toLowerCase() === searchTerm || wordRegex.test(keyword)
+        )) {
+          return true;
+        }
+        
+        return false;
+      });
+    }
+    
+    return filtered;
+  }, [trends, filters]);
 
   // Client-side pagination
   const trendsPerPage = 10;
@@ -519,7 +713,6 @@ export function TrendSelector({
               {filteredTrends.map((trend) => {
                 const isSelected = selectedTrendIds.includes(trend.id);
                 const isExpanded = expandedRows.has(trend.id);
-                const { totalMentions, avgEngagement } = calculateEngagement(trend);
                 
                 return (
                   <div key={trend.id} className={cn(
@@ -588,21 +781,21 @@ export function TrendSelector({
                                   trend.trend_score >= 6 ? "bg-yellow-100 text-yellow-800" :
                                   "bg-red-100 text-red-800"
                                 )}>
-                                  {trend.trend_score.toFixed(1)}
+                                  {getTrendScore(trend)}
                                 </div>
                                 <div className="text-xs text-muted-foreground">Score</div>
                               </div>
                               
                               <div className="text-center">
                                 <div className="text-lg font-bold mb-1">
-                                  {totalMentions.toLocaleString()}
+                                  {getReachDisplay(trend)}
                                 </div>
-                                <div className="text-xs text-muted-foreground">Mentions</div>
+                                <div className="text-xs text-muted-foreground">Reach</div>
                               </div>
                               
                               <div className="text-center">
                                 <div className="text-lg font-bold mb-1">
-                                  {avgEngagement.toFixed(1)}%
+                                  {getEngagementRate(trend) === 'N/A' ? 'N/A' : `${getEngagementRate(trend)}%`}
                                 </div>
                                 <div className="text-xs text-muted-foreground">Engagement</div>
                               </div>
@@ -650,36 +843,63 @@ export function TrendSelector({
                             {trend.sources && trend.sources.length > 0 && (
                               <div className="space-y-2">
                                 <h4 className="text-sm font-medium">Sources</h4>
-                                <div className="flex flex-wrap gap-1">
-                                  {(() => {
-                                    // Get platform from trend-level collection_source field
-                                    const collectionSource = trend.collection_source;
+                                <div className="space-y-2">
+                                  {trend.sources.slice(0, 3).map((source, idx) => {
+                                    const isTwitter = source.platform?.toLowerCase() === 'twitter' || source.platform?.toLowerCase() === 'x';
                                     
-                                    if (collectionSource) {
-                                      // Map platform names to user-friendly labels
-                                      const getPlatformLabel = (platform: string) => {
-                                        const lower = platform.toLowerCase();
-                                        if (lower === 'twitter' || lower === 'x') return 'hashtag';
-                                        if (lower === 'reddit') return 'reddit';
-                                        if (lower === 'rss' || lower === 'rss_feeds') return 'rss';
-                                        if (lower === 'linkup') return 'linkup';
-                                        return lower;
-                                      };
-                                      
-                                      return [
-                                        <Badge key={0} variant="outline" className="text-xs">
-                                          {getPlatformLabel(collectionSource)}
-                                        </Badge>
-                                      ];
-                                    }
-                                    
-                                    // Fallback to "Unknown" if no collection_source found
-                                    return [
-                                      <Badge key={0} variant="outline" className="text-xs">
-                                        unknown
-                                      </Badge>
-                                    ];
-                                  })()}
+                                    return (
+                                      <div key={idx} className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs">
+                                        {isTwitter && source.author_info ? (
+                                          // Rich Twitter source display
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1 mb-1">
+                                              <span className="font-medium truncate">
+                                                @{source.author_info.username}
+                                              </span>
+                                              {source.author_info.verified && (
+                                                <span className="text-blue-500 text-xs">✓</span>
+                                              )}
+                                              {source.quality_score && source.quality_score >= 8 && (
+                                                <Badge className="text-xs bg-green-100 text-green-800 border-green-200 px-1 py-0">
+                                                  High Quality
+                                                </Badge>
+                                              )}
+                                              {source.is_viral && (
+                                                <Badge className="text-xs bg-red-100 text-red-800 border-red-200 px-1 py-0">
+                                                  🔥 Viral
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            {source.metrics && (
+                                              <div className="text-muted-foreground text-xs">
+                                                {source.metrics.views?.toLocaleString() || '0'} views • {' '}
+                                                {source.metrics.like_count?.toLocaleString() || '0'} likes
+                                                {source.metrics.bookmarks > 0 && (
+                                                  <> • {source.metrics.bookmarks.toLocaleString()} bookmarks</>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          // Standard source display for non-Twitter sources
+                                          <div className="flex-1 min-w-0">
+                                            <Badge variant="outline" className="text-xs">
+                                              {source.platform === 'twitter' || source.platform === 'x' ? 'Twitter' :
+                                               source.platform === 'reddit' ? 'Reddit' :
+                                               source.platform === 'rss' ? 'RSS' :
+                                               source.platform === 'linkup' ? 'LinkUp' :
+                                               source.platform}
+                                            </Badge>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                  {trend.sources.length > 3 && (
+                                    <div className="text-xs text-muted-foreground">
+                                      +{trend.sources.length - 3} more sources
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -724,23 +944,23 @@ export function TrendSelector({
                                 trend.trend_score >= 6 ? "bg-yellow-100 text-yellow-800" :
                                 "bg-red-100 text-red-800"
                               )}>
-                                {trend.trend_score.toFixed(1)}
+                                {getTrendScore(trend)}
                               </div>
                               <span className="text-xs text-muted-foreground">Score</span>
                             </div>
                             
-                            {/* Mentions */}
+                            {/* Reach */}
                             <div className="flex items-center gap-1">
                               <div className="text-sm font-semibold">
-                                {totalMentions.toLocaleString()}
+                                {getReachDisplay(trend)}
                               </div>
-                              <span className="text-xs text-muted-foreground">Mentions</span>
+                              <span className="text-xs text-muted-foreground">Reach</span>
                             </div>
                             
                             {/* Engagement */}
                             <div className="flex items-center gap-1">
                               <div className="text-sm font-semibold">
-                                {avgEngagement.toFixed(1)}%
+                                {getEngagementRate(trend) === 'N/A' ? 'N/A' : `${getEngagementRate(trend)}%`}
                               </div>
                               <span className="text-xs text-muted-foreground">Engagement</span>
                             </div>
@@ -823,36 +1043,63 @@ export function TrendSelector({
                               {trend.sources && trend.sources.length > 0 && (
                                 <div className="space-y-2">
                                   <h4 className="text-sm font-medium">Sources</h4>
-                                  <div className="flex flex-wrap gap-1">
-                                    {(() => {
-                                      // Get platform from trend-level collection_source field
-                                      const collectionSource = trend.collection_source;
+                                  <div className="space-y-2">
+                                    {trend.sources.slice(0, 3).map((source, idx) => {
+                                      const isTwitter = source.platform?.toLowerCase() === 'twitter' || source.platform?.toLowerCase() === 'x';
                                       
-                                      if (collectionSource) {
-                                        // Map platform names to user-friendly labels
-                                        const getPlatformLabel = (platform: string) => {
-                                          const lower = platform.toLowerCase();
-                                          if (lower === 'twitter' || lower === 'x') return 'hashtag';
-                                          if (lower === 'reddit') return 'reddit';
-                                          if (lower === 'rss' || lower === 'rss_feeds') return 'rss';
-                                          if (lower === 'linkup') return 'linkup';
-                                          return lower;
-                                        };
-                                        
-                                        return [
-                                          <Badge key={0} variant="outline" className="text-xs">
-                                            {getPlatformLabel(collectionSource)}
-                                          </Badge>
-                                        ];
-                                      }
-                                      
-                                      // Fallback to "Unknown" if no collection_source found
-                                      return [
-                                        <Badge key={0} variant="outline" className="text-xs">
-                                          unknown
-                                        </Badge>
-                                      ];
-                                    })()}
+                                      return (
+                                        <div key={idx} className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs">
+                                          {isTwitter && source.author_info ? (
+                                            // Rich Twitter source display
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-1 mb-1">
+                                                <span className="font-medium truncate">
+                                                  @{source.author_info.username}
+                                                </span>
+                                                {source.author_info.verified && (
+                                                  <span className="text-blue-500 text-xs">✓</span>
+                                                )}
+                                                {source.quality_score && source.quality_score >= 8 && (
+                                                  <Badge className="text-xs bg-green-100 text-green-800 border-green-200 px-1 py-0">
+                                                    High Quality
+                                                  </Badge>
+                                                )}
+                                                {source.is_viral && (
+                                                  <Badge className="text-xs bg-red-100 text-red-800 border-red-200 px-1 py-0">
+                                                    🔥 Viral
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              {source.metrics && (
+                                                <div className="text-muted-foreground text-xs">
+                                                  {source.metrics.views?.toLocaleString() || '0'} views • {' '}
+                                                  {source.metrics.like_count?.toLocaleString() || '0'} likes
+                                                  {source.metrics.bookmarks > 0 && (
+                                                    <> • {source.metrics.bookmarks.toLocaleString()} bookmarks</>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            // Standard source display for non-Twitter sources
+                                            <div className="flex-1 min-w-0">
+                                              <Badge variant="outline" className="text-xs">
+                                                {source.platform === 'twitter' || source.platform === 'x' ? 'Twitter' :
+                                                 source.platform === 'reddit' ? 'Reddit' :
+                                                 source.platform === 'rss' ? 'RSS' :
+                                                 source.platform === 'linkup' ? 'LinkUp' :
+                                                 source.platform}
+                                              </Badge>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {trend.sources.length > 3 && (
+                                      <div className="text-xs text-muted-foreground">
+                                        +{trend.sources.length - 3} more sources
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
